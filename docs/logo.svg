@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="hive-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6e40c9;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#a855f7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ec4899;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background hexagon -->
+  <polygon points="100,10 190,45 190,155 100,190 10,155 10,45" 
+           fill="url(#hive-gradient)" filter="url(#glow)" opacity="0.9"/>
+  
+  <!-- Inner hexagon -->
+  <polygon points="100,25 175,62 175,138 100,175 25,138 25,62" 
+           fill="#0d0d0d"/>
+  
+  <!-- Honeycomb pattern -->
+  <g fill="none" stroke="url(#hive-gradient)" stroke-width="1.5" opacity="0.6">
+    <polygon points="100,45 145,68 145,112 100,135 55,112 55,68"/>
+    <polygon points="100,60 130,77 130,103 100,120 70,103 70,77"/>
+  </g>
+  
+  <!-- Central bee/hive icon -->
+  <g transform="translate(100,100)">
+    <!-- Body segments -->
+    <ellipse cx="0" cy="0" rx="18" ry="12" fill="#1a1a1a" stroke="url(#hive-gradient)" stroke-width="2"/>
+    <ellipse cx="0" cy="0" rx="14" ry="9" fill="#2a2a2a"/>
+    
+    <!-- Stripes -->
+    <rect x="-14" y="-8" width="28" height="3" fill="url(#hive-gradient)"/>
+    <rect x="-12" y="-2" width="24" height="3" fill="url(#hive-gradient)"/>
+    <rect x="-10" y="4" width="20" height="3" fill="url(#hive-gradient)"/>
+    
+    <!-- Wings -->
+    <ellipse cx="-20" cy="-8" rx="14" ry="8" fill="#ffffff" opacity="0.3" transform="rotate(-30)"/>
+    <ellipse cx="20" cy="-8" rx="14" ry="8" fill="#ffffff" opacity="0.3" transform="rotate(30)"/>
+    
+    <!-- Antennae -->
+    <path d="M-8,-12 Q-18,-20 -20,-28" stroke="url(#hive-gradient)" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M8,-12 Q18,-20 20,-28" stroke="url(#hive-gradient)" stroke-width="2" fill="none" stroke-linecap="round"/>
+    
+    <!-- Eyes -->
+    <circle cx="-6" cy="-4" r="3" fill="#6e40c9"/>
+    <circle cx="6" cy="-4" r="3" fill="#6e40c9"/>
+    <circle cx="-5" cy="-5" r="1" fill="#ffffff"/>
+    <circle cx="7" cy="-5" r="1" fill="#ffffff"/>
+  </g>
+  
+  <!-- Network nodes around -->
+  <g fill="url(#hive-gradient)">
+    <circle cx="180" cy="35" r="4" opacity="0.8"/>
+    <circle cx="20" cy="35" r="4" opacity="0.8"/>
+    <circle cx="180" cy="165" r="4" opacity="0.8"/>
+    <circle cx="20" cy="165" r="4" opacity="0.8"/>
+  </g>
+  
+  <!-- Connection lines -->
+  <g stroke="url(#hive-gradient)" stroke-width="1" opacity="0.4">
+    <line x1="100" y1="45" x2="180" y2="35"/>
+    <line x1="100" y1="45" x2="20" y2="35"/>
+    <line x1="100" y1="155" x2="180" y2="165"/>
+    <line x1="100" y1="155" x2="20" y2="165"/>
+  </g>
+</svg>

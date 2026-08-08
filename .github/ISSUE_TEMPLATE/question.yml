@@ -1,0 +1,41 @@
+name: Question
+description: Ask a question about Hive
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question about Hive? Ask away!
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: "How do I configure the relay to use a different storage path?"
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Getting Started
+        - Configuration
+        - Agents / QVAC
+        - Workflows
+        - CLI Usage
+        - Development / Contributing
+        - Architecture
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: Have you checked?
+      options:
+        - label: README.md
+        - label: SPEC.md
+        - label: Existing issues
+        - label: Discussions

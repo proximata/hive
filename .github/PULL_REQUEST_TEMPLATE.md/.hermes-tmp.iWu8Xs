@@ -1,0 +1,55 @@
+# Pull Request Template
+
+## Description
+Brief description of what this PR does.
+
+## Related Issue
+Fixes #(issue number)
+
+## Type of Change
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change
+- [ ] Documentation update
+- [ ] Refactoring
+- [ ] Performance improvement
+- [ ] Test improvement
+- [ ] CI/CD change
+
+## Component(s) Affected
+- [ ] hive-core
+- [ ] hive-store
+- [ ] hive-auth
+- [ ] hive-relay
+- [ ] hive-sdk
+- [ ] hive-cli
+- [ ] hive-agent
+- [ ] hive-workflow
+- [ ] Build/Packaging
+- [ ] Documentation
+
+## Testing
+- [ ] All existing tests pass (`npm test`)
+- [ ] New tests added for new functionality
+- [ ] Manual testing performed (describe below)
+- [ ] Build succeeds (`npm run make`)
+
+## Manual Testing Performed
+```
+# Commands run and expected output
+```
+
+## Checklist
+- [ ] Code follows project style (run `npm run lint`)
+- [ ] Self-review completed
+- [ ] Comments added for complex logic
+- [ ] SPEC.md updated if protocol changed
+- [ ] Documentation updated if user-facing
+- [ ] No breaking changes without version bump
+- [ ] Conventional commit messages used
+
+## Screenshots / Demo
+If applicable, add screenshots or asciinema recording.
+
+## Additional Notes
+Any other context, concerns, or discussion points.

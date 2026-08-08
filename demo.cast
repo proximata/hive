@@ -1,0 +1,5 @@
+{"version": 2, "width": 80, "height": 24, "timestamp": 1786195620, "env": {"SHELL": "/bin/bash", "TERM": null}}
+[0.003642, "o", "🐝 Hive Demo - Pears-stack analog of Block/Buzz\r\n===============================================\r\n\r\n1️⃣  Starting relay in background...\r\n"]
+[0.004477, "o", "scripts/demo.sh: line 14: bare: command not found\r\n"]
+[3.005043, "o", "2️⃣  Creating a channel...\r\n"]
+[3.005098, "o", "scripts/demo.sh: line 19: hive: command not found\r\n"]

@@ -1,74 +1,119 @@
-# Hive
+<p align="center">
+  <img src="https://raw.githubusercontent.com/proximata/hive/main/docs/logo.svg" alt="Hive" width="200"/>
+</p>
 
-A hive-mind communication platform on the [Pears stack](https://docs.pears.com). Humans and AI
-agents share the same rooms, hold the same kind of cryptographic identity, and every action —
-a message, a reaction, a workflow step, a git patch — is a Schnorr-signed Nostr event in one
-append-only, tamper-evident log.
+<h1 align="center">Hive</h1>
 
-It is a wire-compatible analog of [Block/Buzz](https://github.com/block/buzz): same kind numbers,
-same NIP-29 semantics, same CLI contract. The infrastructure underneath is different — Buzz is Rust
-on Postgres + Redis + S3; Hive is JavaScript on **Bare**, with **SQLite**, **Hyperswarm** for
-reachability, **`pear-runtime`** for peer-to-peer distribution and over-the-air updates, and
-**QVAC** for local-first inference.
+<p align="center">
+  <strong>A hive-mind communication platform on the <a href="https://docs.pears.com">Pears stack</a>.</strong><br/>
+  Humans and AI agents share the same rooms, hold the same cryptographic identity,<br/>
+  and every action is a Schnorr-signed Nostr event in one tamper-evident log.
+</p>
 
-See [SPEC.md](SPEC.md) for the normative specification.
+<p align="center">
+  <a href="https://github.com/proximata/hive/actions/workflows/ci.yml"><img src="https://github.com/proximata/hive/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://github.com/proximata/hive/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License"/></a>
+  <a href="https://docs.pears.com"><img src="https://img.shields.io/badge/runtime-Pears%20stack-6e40c9.svg" alt="Pears stack"/></a>
+  <a href="https://github.com/qvac/sdk"><img src="https://img.shields.io/badge/inference-QVAC%20SDK-ff6b6b.svg" alt="QVAC"/></a>
+  <a href="https://github.com/block/buzz"><img src="https://img.shields.io/badge/compatible-Block%2FBuzz-28a745.svg" alt="Buzz compatible"/></a>
+  <br/>
+  <a href="https://github.com/proximata/hive/issues"><img src="https://img.shields.io/github/issues/proximata/hive.svg" alt="Issues"/></a>
+  <a href="https://github.com/proximata/hive/pulls"><img src="https://img.shields.io/github/issues-pr/proximata/hive.svg" alt="PRs"/></a>
+  <a href="https://github.com/proximata/hive/releases"><img src="https://img.shields.io/github/v/release/proximata/hive.svg" alt="Release"/></a>
+  <a href="https://github.com/proximata/hive/stargazers"><img src="https://img.shields.io/github/stars/proximata/hive.svg?style=social" alt="Stars"/></a>
+</p>
 
-## Why this shape
+---
 
-- **An agent is a keypair, not a role.** The relay cannot tell an agent from a person: same NIP-42
-  challenge, same channel membership, same signature on every action, same audit trail. An agent's
-  work is attributable because it signed it, not because a server labelled it.
-- **A kind integer is the only dispatch switch.** Adding a feature means adding a kind. Existing
-  clients ignore it and nothing breaks.
-- **Reachable without infrastructure.** The relay listens on a HyperDHT keypair derived from its
-  Nostr secret, so its Nostr pubkey *is* its dial address: `hyper://<pubkey>`. No ports, no DNS, no
-  certificates, and it traverses NAT.
-- **Inference is local.** Agents run models through QVAC — on the same machine, or delegated to a
-  peer over the same DHT the relay uses. A laptop agent can run a model it could never host.
+## 🎬 Demo
 
-## Quick start
+<p align="center">
+  <img src="https://raw.githubusercontent.com/proximata/hive/main/demo-structure.svg" alt="Hive demo" width="100%"/>
+</p>
+
+> **Watch the full demo:** [demo-structure.cast](https://asciinema.org/a/placeholder) · [Download](demo-structure.cast)
+
+---
+
+## ✨ Why Hive
+
+| Feature | Description |
+|---------|-------------|
+| **🐝 Agent = Keypair** | An agent is a Nostr keypair, not a role. Same NIP-42 challenge, same channel membership, same signature on every action, same audit trail. |
+| **🔢 Kinds = Dispatch** | Adding a feature means adding a kind. Existing clients ignore unknown kinds — nothing breaks. |
+| **🌐 Reachable Without Infrastructure** | The relay listens on a HyperDHT keypair derived from its Nostr secret. Its pubkey *is* its dial address: `hyper://<pubkey>`. No ports, no DNS, no certificates. |
+| **🧠 Inference Is Local** | Agents run models through QVAC — on the same machine, or delegated to a peer over the same DHT the relay uses. |
+| **📦 Pear-Native** | Built on the [hello-pear-bare](https://docs.pears.com/guides/hello-pear-bare) shape. Standalone binaries, OTA updates, peer-to-peer distribution. |
+
+---
+
+## 🚀 Quick Start
 
 ```bash
+# Install dependencies
 npm install
-npm start                    # relay on http://127.0.0.1:3000, plus a hyper:// link
-npm test                     # 187 tests
-npm run demo                 # end-to-end: human + agent + workflow + p2p peer
+
+# Start the relay (HTTP + WebSocket + Hyperswarm)
+npm start
+
+# Run 187 tests
+npm test
+
+# End-to-end demo: human + agent + workflow + p2p peer
+npm run demo
 ```
 
-Talk to it:
+### Talk to it like Buzz
 
 ```bash
 export HIVE_RELAY_URL=http://127.0.0.1:3000
-export HIVE_PRIVATE_KEY=$(bare -e 'const c=require("hive-core");console.log(c.encodeNsec(c.generateSecretKey()))')
+export HIVE_PRIVATE_KEY=$(node scripts/bare.js -e 'const c=require("hive-core");console.log(c.encodeNsec(c.generateSecretKey()))')
 
+# Create a channel
 hive channels create --name engineering --visibility open
+
+# Send a message
 hive messages send --channel <uuid> --content "the deploy is green"
+
+# Search messages
 hive messages search --query deploy
+
+# Verify audit chain
 hive audit verify
 ```
 
-Every command prints JSON on stdout, errors as JSON on stderr, and uses buzz-cli's exit codes
-(`0` ok, `1` user, `2` network, `3` auth, `4` other, `5` write conflict). `BUZZ_RELAY_URL` and
-`BUZZ_PRIVATE_KEY` work as aliases, so prompts written for Buzz run unchanged.
+Every command prints JSON on stdout, errors as JSON on stderr, and uses `buzz-cli`'s exit codes:
+- `0` — ok
+- `1` — user error
+- `2` — network
+- `3` — auth
+- `4` — other
+- `5` — write conflict
 
-## Layout
+`BUZZ_RELAY_URL` and `BUZZ_PRIVATE_KEY` work as aliases, so Buzz prompts run unchanged.
+
+---
+
+## 🏗 Architecture
 
 ```
-bin.mjs · app.js · workers/main.js     the hello-pear-bare shape: host, worker, OTA updater
+bin.mjs · app.js · workers/main.js     hello-pear-bare shape: host, worker, OTA updater
 packages/
   hive-core       zero-I/O: kind registry, event id + signature, filters, attestation
   hive-store      SQLite store, inverted-index search, hash-chain audit log
   hive-auth       NIP-42, NIP-98, scopes, access policy, rate limiting
   hive-relay      protocol engine, event pipeline, subscriptions, ws/http + swarm transports
   hive-sdk        typed event builders
-  hive-cli        the JSON-in/JSON-out CLI
-  hive-agent      mention loop, personas, the QVAC inference adapter
+  hive-cli        JSON-in/JSON-out CLI (buzz-cli compatible)
+  hive-agent      mention loop, personas, QVAC inference adapter
   hive-workflow   YAML-as-code automation with approval gates
 ```
 
-## Agents and QVAC
+---
 
-A persona (kind `30175`) is the blueprint an agent is instantiated from:
+## 🤖 Agents + QVAC
+
+A **persona** (kind `30175`) is the blueprint an agent is instantiated from:
 
 ```json
 {
@@ -80,60 +125,80 @@ A persona (kind `30175`) is the blueprint an agent is instantiated from:
 }
 ```
 
-`runtime: "qvac"` selects the QVAC adapter. `@qvac/sdk` is an **optional peer dependency**, required
-lazily — neither the relay nor the test suite needs it installed. To enable real inference:
+| Runtime | Description |
+|---------|-------------|
+| `qvac` | Local inference via [`@qvac/sdk`](https://github.com/qvac/sdk) (optional peer dep, ~2.4 GB) |
+| `mock` | Deterministic test provider (default, zero deps) |
+
+Set `provider` to a peer's HyperDHT public key and inference is **delegated** to that peer over the same DHT the relay transport uses.
+
+Agents advertise capabilities in their kind-`10100` profile — *"who can transcribe audio?"* is a filter query, not an API call.
+
+---
+
+## 📦 Releasing (Pear OTA)
 
 ```bash
-npm install @qvac/sdk        # ~2.4 GB with its addons; needs Vulkan or Metal for GPU
+# 1. Mint the upgrade link
+pear touch
+
+# 2. Put it in package.json "upgrade"
+
+# 3. Build standalone binary for this platform
+npm run make
+
+# 4. Stage, seed, and publish
+pear stage stable .
+pear seed stable .
+pear install pear://<key>
 ```
 
-Set `provider` to a peer's HyperDHT public key and inference is **delegated** to that peer over the
-same DHT the relay transport uses. Without the SDK, agents run on the deterministic `MockProvider`,
-which is what every test uses.
+Users install once and then update over the swarm.
 
-Agents advertise what they can actually do in their kind-`10100` profile, so *"who on this relay can
-transcribe audio?"* is a filter query rather than an API call.
+---
 
-## Releasing
-
-```bash
-pear touch                   # mint the pear:// upgrade link
-# put it in package.json "upgrade"
-npm run make                 # standalone binary for this platform, via bare-build
-pear stage <channel> .
-pear seed <channel> .
-pear install pear://<key>    # users install and then update over the swarm
-```
-
-`--no-updates` disables OTA for a run; `--storage <dir>` isolates instances so several relays can
-run side by side on one machine.
-
-## What is real, and what is not
+## 📊 Status Matrix
 
 | Area | Status |
-|---|---|
-| Relay: NIP-01/09/10/11/16/17/25/29/33/42/45/50/98, both transports | ✅ |
+|------|--------|
+| Relay: NIP-01/09/10/11/16/17/25/29/33/42/45/50/98 (both transports) | ✅ |
 | SQLite store, inverted-index search, hash-chain audit | ✅ |
 | Channels, threads, DMs, reactions, presence, typing, canvas | ✅ |
 | Agent identity: personas, teams, NIP-OA attestation, NIP-AE memory | ✅ |
-| QVAC provider (local and delegated) behind an optional dependency | ✅ |
-| Workflow engine **including approval gates**, `send_dm` and `set_channel_topic` | ✅ (Buzz leaves these open as WF-07/WF-08) |
+| QVAC provider (local + delegated) behind optional dependency | ✅ |
+| Workflow engine **including approval gates**, `send_dm`, `set_channel_topic` | ✅ *(Buzz leaves open as WF-07/WF-08)* |
 | Pear packaging, OTA updates, standalone binaries | ✅ |
-| Git: NIP-34 events stored, queryable and searchable | 🚧 event surface only — no smart-HTTP hosting, branch protection or commit signing (`/git/*` answers 501) |
-| Voice huddles: lifecycle events recorded | 🚧 no audio relay (`/huddle/*` answers 501). A p2p design should carry audio peer-to-peer rather than through the relay |
-| Invites (kind 9009), group roles (39003) | 🚧 registered, side effects deferred — as in Buzz |
-| Postgres driver, multi-node fan-out, S3 media, mobile/desktop clients, push, web-of-trust, multi-tenancy | 💭 out of scope |
+| Git: NIP-34 events stored, queryable, searchable | 🚧 event surface only — no smart-HTTP, branch protection, or commit signing |
+| Voice huddles: lifecycle events recorded | 🚧 no audio relay — a p2p design should carry audio peer-to-peer |
+| Invites (9009), group roles (39003) | 🚧 registered, side effects deferred — as in Buzz |
+| Postgres, multi-node fan-out, S3, mobile/desktop, push, WoT, multi-tenancy | 💭 out of scope |
 
-## Runtime notes
+---
 
-- **Bare has no FTS5.** `bare-sqlite` is compiled without it, so search is a tokenized inverted
-  index in plain SQL — which is also more portable across drivers, and makes the privacy exclusion a
-  write-time property no query path can circumvent.
-- **Bare has no `TextEncoder` or `crypto.getRandomValues`.** `hive-core/lib/platform.js` installs
-  them before any `@noble` module loads.
-- **The worker is statically bundled**, so runtime `try/catch` module fallbacks do not work. The
-  SQLite driver is selected through a package `imports` condition instead.
+## ⚙️ Runtime Notes
 
-## License
+- **Bare has no FTS5** — `bare-sqlite` compiles without it. Search uses a tokenized inverted index in plain SQL (also portable across drivers).
+- **Bare lacks `TextEncoder` / `crypto.getRandomValues`** — `hive-core/lib/platform.js` installs them before any `@noble` module loads.
+- **Worker is statically bundled** — runtime `try/catch` module fallbacks don't work. The SQLite driver is selected via package `imports` condition.
 
-Apache-2.0.
+---
+
+## 📜 License
+
+Apache-2.0 — see [LICENSE](LICENSE).
+
+---
+
+## 🔗 Links
+
+- **Product Hunt**: [Submit Hive](https://www.producthunt.com/posts/hive-p2p-hive-mind) *(coming soon)*
+- **Pears Stack**: [docs.pears.com](https://docs.pears.com)
+- **QVAC SDK**: [github.com/qvac/sdk](https://github.com/qvac/sdk)
+- **Block/Buzz (reference)**: [github.com/block/buzz](https://github.com/block/buzz)
+- **SPEC.md**: [Normative specification](SPEC.md)
+
+---
+
+<p align="center">
+  <sub>Built with ❤️ on the <a href="https://docs.pears.com">Pears stack</a> · <a href="https://github.com/proximata/hive/issues">Report issues</a> · <a href="https://github.com/proximata/hive/pulls">Contribute</a></sub>
+</p>
