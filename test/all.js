@@ -4,6 +4,7 @@
 // individual one can also be run directly: `bare test/core.js`.
 
 require('./core')
+require('./tui')
 require('./store')
 require('./relay')
 require('./swarm')

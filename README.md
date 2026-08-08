@@ -27,11 +27,53 @@
 
 ## 🎬 Demo
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/proximata/hive/main/docs/demo.png" alt="Hive demo" width="100%"/>
-</p>
+One command boots a relay, five identities and an agent, then plays the whole
+product against them — every line below arrived as a signed event:
 
-> **Watch the full demo:** [demo-structure.cast](https://asciinema.org/a/placeholder) · [Download](demo-structure.cast)
+```
+╭─ Channels ─────────╮╭─ #engineering ─────────────────────────────────╮╭─ EVENT FLOW ─────────────╮
+│ > #engineering     ││                                                ││ ✓ 0 connection           │
+│   #design          ││                                                ││ ✓ 22242 auth alice       │
+│                    ││                                                ││ ✓ 9007 nip29 create grou │
+│                    ││                                                ││ ✓ 9007 nip29 create grou │
+│                    ││                                                ││ ✓ 9021 nip29 join reques │
+│                    ││                                                ││ ✓ 9021 nip29 join reques │
+│                    ││                                                ││ ✓ 9000 nip29 put user ad │
+│                    ││                                                ││ ✓ 0 connection           │
+│                    ││                                                ││ ✓ 22242 auth honey       │
+│                    ││                                                ││ ✓ 10100 agent profile ho │
+│                    ││                                                ││ ✓ 9 stream message alice │
+│                    ││   19:13 alice                                  ││ ✓ 9 stream message bob   │
+│                    ││    relay build 42 is green on the swarm        ││ ✓ 9 stream message honey │
+│                    ││    transport                                   ││ ✓ 9 stream message alice │
+│                    ││ ▸ 19:13 bob                                    ││ ✓ 9 stream message bob   │
+│                    ││ ▸  nice, I will take the flaky reconnect test  ││ ✓ 9 stream message alice │
+│                    ││ ▸  :tada: 1                                    ││ ✓ 7 reaction alice       │
+│                    ││ │ 19:13 honey                                  ││ ✓ 41010 dm open alice    │
+│                    ││ │  honey here - mention me and I answer in     ││ ✓ 1059 gift wrap alice   │
+│                    ││ │  this channel                                ││                          │
+│                    ││   19:13 alice                                  ││                          │
+│                    ││    who owns the deploy key for staging?        ││                          │
+│                    ││   19:13 bob                                    ││                          │
+│                    ││    I will deploy build 42 after lunch          ││                          │
+╰────────────────────╯│   19:13 alice                                  ││                          │
+╭─ DMs ──────────────╮│    deployment runbook lives in the canvas      ││                          │
+│   @alice, bob      ││ ❯ write a message                              ││ 1.5/s 2c 2s              │
+╰────────────────────╯╰──────────── 4 members · alice honey admin bob ─╯╰──────────────────────────╯
+ carol is not in the p tag: the same lookup returns nothing for npub14a ↑↓ move · / search · q quit
+```
+
+> **Watch it play:** [`docs/demo-tui.cast`](docs/demo-tui.cast) — `asciinema play docs/demo-tui.cast`.
+> `scripts/record-demo.sh --tui` re-records it, and renders `docs/demo-tui.gif` when [agg](https://github.com/asciinema/agg) is installed.
+
+| Command | What it does |
+|---------|--------------|
+| `npm run demo:tui` | The demo in your terminal: the script plays, the keyboard steers. `1` user, `2` admin, `tab` focus, `[`/`]` admin sub-tabs, `/` search, `q` quit. |
+| `hive demo` | The same demo from the CLI, on a relay of its own. |
+| `npm run demo:tui -- --demo` | Headless: run every scene, assert what the relay actually did, print `PASS`/`FAIL` per scene and exit non-zero if any failed. This is what CI runs. |
+| `npm run demo:tui -- --record` | Real pacing, no keyboard, exits at the end — the shape a recording wants. |
+| `npm run demo:tui -- --relay <url>` | Attach to a relay that is already running instead of booting one. Panels that need the local store say so rather than inventing numbers. |
+| `npm run demo:tui -- --speed 2` | Multiply the pace. `--no-swarm`, `--seed <n>`, `--cols`/`--rows` are also there; `--help` lists them. |
 
 ---
 
@@ -171,6 +213,7 @@ Users install once and then update over the swarm.
 | Git: NIP-34 events stored, queryable, searchable | 🚧 event surface only — no smart-HTTP, branch protection, or commit signing |
 | Voice huddles: lifecycle events recorded | 🚧 no audio relay — a p2p design should carry audio peer-to-peer |
 | Invites (9009), group roles (39003) | 🚧 registered, side effects deferred — as in Buzz |
+| Moderation: bans/timeouts (9040–9044), reports (1984), mute lists (10000) | 🚧 recorded, signed and audited — enforcement deferred: a ban does not yet block a publish |
 | Postgres, multi-node fan-out, S3, mobile/desktop, push, WoT, multi-tenancy | 💭 out of scope |
 
 ---
