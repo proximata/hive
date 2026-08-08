@@ -9,6 +9,10 @@ const { InferenceProvider, CAPABILITIES } = require('./provider')
  * relay nor the test suite ever needs it installed. A persona selects this
  * provider with `runtime: "qvac"`.
  *
+ * The require goes through the `#qvac-sdk` import rather than naming the SDK
+ * directly, so that a bundler resolving the graph ahead of time finds the
+ * `lib/qvac-absent.js` fallback instead of failing the build. See that file.
+ *
  * Delegated inference is the interesting part for a Pears deployment: when a
  * persona names a `provider` public key, `loadModel` is given a `delegate`
  * block and inference runs on a remote peer over HyperDHT — the same DHT the
@@ -29,7 +33,7 @@ class QvacProvider extends InferenceProvider {
   #load () {
     if (this.sdk !== null) return this.sdk
     try {
-      this.sdk = require('@qvac/sdk')
+      this.sdk = require('#qvac-sdk')
     } catch {
       throw new Error(
         'the qvac runtime needs @qvac/sdk installed: npm install @qvac/sdk ' +
@@ -141,7 +145,7 @@ class QvacProvider extends InferenceProvider {
 
 function tryLoad () {
   try {
-    return require('@qvac/sdk')
+    return require('#qvac-sdk')
   } catch {
     return null
   }
