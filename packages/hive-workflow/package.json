@@ -11,6 +11,6 @@
   "dependencies": {
     "bare-events": "^2.5.4",
     "hive-core": "^0.1.0",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^5.2.3"
   }
 }
