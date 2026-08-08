@@ -28,7 +28,7 @@
 ## 🎬 Demo
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/proximata/hive/main/demo-structure.svg" alt="Hive demo" width="100%"/>
+  <img src="https://raw.githubusercontent.com/proximata/hive/main/docs/demo.svg" alt="Hive demo" width="100%"/>
 </p>
 
 > **Watch the full demo:** [demo-structure.cast](https://asciinema.org/a/placeholder) · [Download](demo-structure.cast)
