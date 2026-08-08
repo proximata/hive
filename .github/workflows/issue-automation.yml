@@ -47,7 +47,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install dependencies
         run: npm ci
@@ -60,7 +60,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           echo "$ANTHROPIC_API_KEY" > ~/.anthropic_api_key
-          claude auth login --console --api-key "$ANTHROPIC_API_KEY"
+          claude auth login --console
 
       - name: Create worktree for issue
         id: worktree
@@ -127,14 +127,16 @@ jobs:
             gh issue edit ${{ github.event.issue.number }} --remove-label "solving" --add-label "solved" --repo ${{ github.repository }}
             gh issue comment ${{ github.event.issue.number }} --body "🤖 Automated fix submitted in PR #$(gh pr list --head issue/${{ github.event.issue.number }} --json number --jq '.[0].number')" --repo ${{ github.repository }}
           else
-            gh issue edit ${{ github.event.issue.number }} --remove-label "solving" --add-label "needs-triage" --repo ${{ github.repository }}
+            gh issue edit ${{ github.event.issue.number }} --remove-label "solving" --repo ${{ github.repository }}
             gh issue comment ${{ github.event.issue.number }} --body "🤖 No changes made - issue may need manual review" --repo ${{ github.repository }}
           fi
 
       - name: Cleanup worktree
         if: always()
         run: |
-          git worktree remove ${{ steps.worktree.outputs.worktree_dir }} --force
+          if [ -n "${{ steps.worktree.outputs.worktree_dir }}" ]; then
+            git worktree remove ${{ steps.worktree.outputs.worktree_dir }} --force
+          fi
 
   monitor:
     name: Monitor & Report
