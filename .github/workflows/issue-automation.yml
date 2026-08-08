@@ -1,0 +1,143 @@
+name: Issue Automation
+
+on:
+  issues:
+    types: [opened, reopened, labeled]
+  issue_comment:
+    types: [created]
+
+jobs:
+  triage:
+    name: Triage & Auto-Assign
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Auto-label new issues
+        if: github.event.action == 'opened'
+        run: |
+          gh issue edit ${{ github.event.issue.number }} --add-label "needs-triage" --repo ${{ github.repository }}
+
+      - name: Trigger auto-solve on /solve label
+        if: github.event.action == 'labeled' && github.event.label.name == 'solve'
+        run: |
+          gh issue edit ${{ github.event.issue.number }} --remove-label "solve" --add-label "solving" --repo ${{ github.repository }}
+
+  solve:
+    name: Solve Issue with Claude Code
+    needs: triage
+    if: github.event.action == 'labeled' && github.event.label.name == 'solve'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      issues: write
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Setup Claude auth
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo "$ANTHROPIC_API_KEY" > ~/.anthropic_api_key
+          claude auth login --console --api-key "$ANTHROPIC_API_KEY"
+
+      - name: Create worktree for issue
+        id: worktree
+        run: |
+          ISSUE_NUM=${{ github.event.issue.number }}
+          WORKTREE_DIR=".claude/worktrees/issue-$ISSUE_NUM"
+          git worktree add $WORKTREE_DIR -b "issue/$ISSUE_NUM" main
+          echo "worktree_dir=$WORKTREE_DIR" >> $GITHUB_OUTPUT
+
+      - name: Run Claude Code to solve issue
+        working-directory: ${{ steps.worktree.outputs.worktree_dir }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUM=${{ github.event.issue.number }}
+          ISSUE_TITLE="${{ github.event.issue.title }}"
+          ISSUE_BODY="${{ github.event.issue.body }}"
+
+          cat > /tmp/issue-prompt.md <<EOF
+          Solve GitHub issue #$ISSUE_NUM: $ISSUE_TITLE
+
+          Issue description:
+          $ISSUE_BODY
+
+          Repository: ${{ github.repository }}
+          Worktree: ${{ steps.worktree.outputs.worktree_dir }}
+
+          Requirements:
+          - Implement the fix/feature described in the issue
+          - Write tests for any new functionality
+          - Ensure all existing tests pass
+          - Follow the project's code style and architecture
+          - Commit changes with conventional commit messages
+          EOF
+
+          claude -p "$(cat /tmp/issue-prompt.md)" \
+            --allowedTools 'Read,Write,Edit,Bash,WebFetch,WebSearch' \
+            --max-turns 30 \
+            --output-format json \
+            > /tmp/claude-result.json 2>&1 || true
+
+          cat /tmp/claude-result.json
+
+      - name: Push changes and create PR
+        if: always()
+        working-directory: ${{ steps.worktree.outputs.worktree_dir }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "fix: resolve issue #${{ github.event.issue.number }}"
+            git push origin HEAD:issue/${{ github.event.issue.number }}
+
+            gh pr create \
+              --title "Fix #${{ github.event.issue.number }}: ${{ github.event.issue.title }}" \
+              --body "Automated fix for issue #${{ github.event.issue.number }}" \
+              --base main \
+              --head issue/${{ github.event.issue.number }} \
+              --repo ${{ github.repository }}
+
+            gh issue edit ${{ github.event.issue.number }} --remove-label "solving" --add-label "solved" --repo ${{ github.repository }}
+            gh issue comment ${{ github.event.issue.number }} --body "🤖 Automated fix submitted in PR #$(gh pr list --head issue/${{ github.event.issue.number }} --json number --jq '.[0].number')" --repo ${{ github.repository }}
+          else
+            gh issue edit ${{ github.event.issue.number }} --remove-label "solving" --add-label "needs-triage" --repo ${{ github.repository }}
+            gh issue comment ${{ github.event.issue.number }} --body "🤖 No changes made - issue may need manual review" --repo ${{ github.repository }}
+          fi
+
+      - name: Cleanup worktree
+        if: always()
+        run: |
+          git worktree remove ${{ steps.worktree.outputs.worktree_dir }} --force
+
+  monitor:
+    name: Monitor & Report
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Report status
+        run: |
+          echo "Issue automation workflow completed"
+          echo "Check the issue for updates: https://github.com/${{ github.repository }}/issues/${{ github.event.issue.number }}"
