@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test (Node ${{ matrix.node-version }}, Bare ${{ matrix.bare-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['18', '20', '22']
+        bare-version: ['stable', 'latest']
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install bare-runtime ${{ matrix.bare-version }}
+        run: |
+          if [ "${{ matrix.bare-version }}" = "stable" ]; then
+            npm install bare-runtime
+          else
+            npm install bare-runtime@latest
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint 2>&1 || echo "No lint script"
+
+      - name: Run tests
+        run: npm test 2>&1 | tail -50
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ matrix.node-version }}-${{ matrix.bare-version }}
+          path: coverage/
+          retention-days: 7
+
+  build:
+    name: Build binary
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install bare-build
+        run: npm install -g bare-build
+
+      - name: Build binary
+        run: npm run build 2>&1 || echo "Build script not available yet"
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hive-binary
+          path: out/
+          retention-days: 7

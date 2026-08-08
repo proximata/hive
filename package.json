@@ -16,6 +16,7 @@
   "scripts": {
     "start": "bare bin.mjs relay --no-updates",
     "test": "bare test/all.js",
+    "lint": "echo \"No linter configured\"",
     "demo": "bare scripts/demo.js",
     "make": "bare scripts/make.js",
     "make:linux-x64": "bare-build --platform linux --arch x64 --out out/linux-x64 bin.mjs",
