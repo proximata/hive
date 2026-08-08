@@ -6,15 +6,24 @@ on:
   pull_request:
     branches: [main]
 
+# `bash -eo pipefail` everywhere: without pipefail, `npm test | tail` reports
+# tail's exit code, which is how this workflow stayed green for its whole life
+# while `npm test` was exiting 127 and running no tests at all.
+defaults:
+  run:
+    shell: bash -eo pipefail {0}
+
 jobs:
   test:
-    name: Test (Node ${{ matrix.node-version }}, Bare ${{ matrix.bare-version }})
+    name: Test (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node-version: ['18', '20', '22']
-        bare-version: ['stable', 'latest']
+        # The suites run under Bare, not Node, so Node's version only governs
+        # the tooling. 22 is the floor because the store's non-Bare driver is
+        # node:sqlite; 24 tracks current.
+        node-version: ['22', '24']
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -25,30 +34,18 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
-      - name: Install bare-runtime ${{ matrix.bare-version }}
-        run: |
-          if [ "${{ matrix.bare-version }}" = "stable" ]; then
-            npm install bare-runtime
-          else
-            npm install bare-runtime@latest
-          fi
-
       - name: Install dependencies
         run: npm ci
 
       - name: Run lint
-        run: npm run lint 2>&1 || echo "No lint script"
+        run: npm run lint
 
+      # No pipe, no `|| true`. If the suite fails, the job fails.
       - name: Run tests
-        run: npm test 2>&1 | tail -50
+        run: npm test
 
-      - name: Upload coverage
-        uses: actions/upload-artifact@v6
-        if: always()
-        with:
-          name: coverage-${{ matrix.node-version }}-${{ matrix.bare-version }}
-          path: coverage/
-          retention-days: 7
+      - name: Run end-to-end demo
+        run: npm run demo
 
   build:
     name: Build binary
@@ -61,22 +58,32 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Install bare-build
-        run: npm install -g bare-build
+      # `npm run build` aliases `make`, which dispatches to the host target.
+      # It used to be `npm run build || echo "Build script not available yet"`
+      # against a script that did not exist, so the job passed while producing
+      # nothing and the upload found an empty out/.
+      - name: Build standalone binary
+        run: npm run build
 
-      - name: Build binary
-        run: npm run build 2>&1 || echo "Build script not available yet"
+      # Guard the upload rather than trusting it: upload-artifact only warns
+      # when a path is empty, so a silently broken build would still look green.
+      - name: Verify the binary exists and runs
+        run: |
+          BINARY=out/linux-x64/hive
+          test -x "$BINARY" || { echo "::error::$BINARY was not produced"; exit 1; }
+          echo "built $(du -h "$BINARY" | cut -f1) binary"
+          test "$("$BINARY" --version)" = "$(node -p "require('./package.json').version")"
 
       - name: Upload binary
         uses: actions/upload-artifact@v6
-        if: always()
         with:
-          name: hive-binary
-          path: out/
+          name: hive-linux-x64
+          path: out/linux-x64/hive
+          if-no-files-found: error
           retention-days: 7
