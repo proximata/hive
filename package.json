@@ -18,6 +18,8 @@
     "test": "node scripts/bare.js test/all.js",
     "lint": "echo \"No linter configured\"",
     "demo": "node scripts/bare.js scripts/demo.js",
+    "demo:tui": "node scripts/demo-runner.js",
+    "demo:cli": "node scripts/demo-runner.js",
     "make": "node scripts/bare.js scripts/make.js",
     "make:linux-x64": "bare-build --host linux-x64 --standalone --name hive --out out/linux-x64 bin.mjs",
     "make:linux-arm64": "bare-build --host linux-arm64 --standalone --name hive --out out/linux-arm64 bin.mjs",

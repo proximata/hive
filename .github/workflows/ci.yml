@@ -47,6 +47,11 @@ jobs:
       - name: Run end-to-end demo
         run: npm run demo
 
+      # The same scenes the TUI plays, asserted against the relay and turned
+      # into an exit code. A pane that stops rendering fails the job too.
+      - name: Run TUI demo scenes
+        run: npm run demo:tui -- --demo
+
   build:
     name: Build binary
     runs-on: ubuntu-latest

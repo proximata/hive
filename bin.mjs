@@ -11,6 +11,7 @@ import { parseArgs } from 'hive-cli/lib/args.js'
 //
 // Two modes in one binary:
 //   hive relay [flags]        run the workspace relay
+//   hive demo [flags]         the guided TUI demo, on a relay of its own
 //   hive <group> <sub> ...    the agent-first CLI against a running relay
 
 const appName = pkg.productName ?? pkg.name
@@ -36,6 +37,14 @@ const USAGE = `${appName} ${pkg.version} — ${pkg.description}
       Run the workspace relay: WebSocket + HTTP on --port, and (unless
       --no-swarm) reachable peer-to-peer at hyper://<relay pubkey>.
 
+  hive demo [--demo] [--record] [--relay <url>] [--speed <n>] [--no-swarm]
+           [--seed <n>] [--cols <n>] [--rows <n>]
+      The guided demo, in the terminal: it boots a relay of its own and plays
+      the whole script against it. --demo asserts every scene and exits
+      non-zero if one fails; --record plays it at real pace for a capture;
+      --relay attaches to a relay that is already running, where the scenes
+      that need the relay's own store or event stream report SKIP.
+
   hive <group> <subcommand> [flags]
       The agent-first CLI. Groups: channels, messages, canvas, reactions, dms,
       users, feed, social, repos, workflows, upload, mem, audit, relay.
@@ -52,9 +61,32 @@ if (flags.version === true || flags.v === true) {
 // `--help` prints usage whatever precedes it. Gating this on "no mode given"
 // meant `hive relay --help` fell straight through and booted a relay on :3000
 // instead of explaining itself.
-if (flags.help === true || flags.h === true) {
+//
+// `demo` is the exception: it owns a screenful of flags and key bindings that
+// this usage only summarises, so it answers `--help` itself below.
+if ((flags.help === true || flags.h === true) && mode !== 'demo') {
   console.log(USAGE)
   Bare.exit(0)
+}
+
+// ------------------------------------------------------------------- demo --
+
+// Ahead of the CLI dispatch below, which claims every mode that is not `relay`.
+//
+// Imported dynamically, but with a literal specifier: `hive channels list`
+// must not pay to load a relay, a DHT testnet and the scene script, while the
+// bundler still sees the edge and packs the demo into the standalone binary.
+//
+// That only holds because the graph resolves without `@qvac/sdk`, which the
+// agent harness names as an optional peer dependency. See the `#qvac-sdk`
+// import in packages/hive-agent/package.json — without it, bare-pack fails the
+// whole build over a module nobody installs.
+if (mode === 'demo') {
+  const { start } = await import('./scripts/demo-tui.js')
+
+  // The demo reads flags only, so passing the mode word along is harmless and
+  // saves guessing where in ARGV it sat.
+  await start(ARGV)
 }
 
 // Anything that is not `relay` is a CLI command, so one binary covers both
