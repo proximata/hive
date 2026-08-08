@@ -1,0 +1,19 @@
+{
+  "name": "hive-cli",
+  "version": "0.1.0",
+  "description": "Agent-first JSON-in/JSON-out CLI, compatible with buzz-cli",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "lib"
+  ],
+  "dependencies": {
+    "b4a": "^1.6.7",
+    "bare-fs": "^4.8.0",
+    "bare-http1": "^4.5.7",
+    "hive-auth": "^0.1.0",
+    "hive-core": "^0.1.0",
+    "hive-sdk": "^0.1.0"
+  }
+}

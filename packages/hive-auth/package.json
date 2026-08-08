@@ -1,0 +1,15 @@
+{
+  "name": "hive-auth",
+  "version": "0.1.0",
+  "description": "NIP-42 and NIP-98 authentication, scopes, access policy and rate limiting",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "lib"
+  ],
+  "dependencies": {
+    "b4a": "^1.6.7",
+    "hive-core": "^0.1.0"
+  }
+}

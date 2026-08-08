@@ -1,0 +1,16 @@
+{
+  "name": "hive-core",
+  "version": "0.1.0",
+  "description": "Zero-I/O core: kind registry, event verification, filter matching",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "lib"
+  ],
+  "dependencies": {
+    "@noble/curves": "^2.3.0",
+    "@noble/hashes": "^2.3.0",
+    "b4a": "^1.6.7"
+  }
+}

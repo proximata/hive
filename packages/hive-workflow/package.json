@@ -1,0 +1,16 @@
+{
+  "name": "hive-workflow",
+  "version": "0.1.0",
+  "description": "YAML-as-code automation with approval gates",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "lib"
+  ],
+  "dependencies": {
+    "bare-events": "^2.5.4",
+    "hive-core": "^0.1.0",
+    "js-yaml": "^4.1.0"
+  }
+}

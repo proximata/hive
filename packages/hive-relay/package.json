@@ -1,0 +1,23 @@
+{
+  "name": "hive-relay",
+  "version": "0.1.0",
+  "description": "NIP-01 relay: protocol engine, event pipeline, subscriptions and transports",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "lib"
+  ],
+  "dependencies": {
+    "b4a": "^1.6.7",
+    "bare-events": "^2.5.4",
+    "bare-fs": "^4.8.0",
+    "bare-http1": "^4.5.7",
+    "bare-path": "^3.1.1",
+    "bare-ws": "^3.0.0",
+    "hive-auth": "^0.1.0",
+    "hive-core": "^0.1.0",
+    "hive-store": "^0.1.0",
+    "hyperswarm": "^4.17.0"
+  }
+}

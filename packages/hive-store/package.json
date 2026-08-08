@@ -1,0 +1,22 @@
+{
+  "name": "hive-store",
+  "version": "0.1.0",
+  "description": "SQLite event store, inverted-index search and hash-chain audit log",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "lib"
+  ],
+  "dependencies": {
+    "b4a": "^1.6.7",
+    "bare-sqlite": "^0.1.4",
+    "hive-core": "^0.1.0"
+  },
+  "imports": {
+    "#sqlite": {
+      "bare": "bare-sqlite",
+      "default": "node:sqlite"
+    }
+  }
+}
