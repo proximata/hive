@@ -14,19 +14,21 @@
     "hive": "./bin.mjs"
   },
   "scripts": {
-    "start": "bare bin.mjs relay --no-updates",
-    "test": "bare test/all.js",
+    "start": "node scripts/bare.js bin.mjs relay --no-updates",
+    "test": "node scripts/bare.js test/all.js",
     "lint": "echo \"No linter configured\"",
-    "demo": "bare scripts/demo.js",
-    "make": "bare scripts/make.js",
-    "make:linux-x64": "bare-build --platform linux --arch x64 --out out/linux-x64 bin.mjs",
-    "make:linux-arm64": "bare-build --platform linux --arch arm64 --out out/linux-arm64 bin.mjs",
-    "make:darwin-x64": "bare-build --platform darwin --arch x64 --out out/darwin-x64 bin.mjs",
-    "make:darwin-arm64": "bare-build --platform darwin --arch arm64 --out out/darwin-arm64 bin.mjs",
-    "make:win32-x64": "bare-build --platform win32 --arch x64 --out out/win32-x64 bin.mjs",
-    "make:win32-arm64": "bare-build --platform win32 --arch arm64 --out out/win32-arm64 bin.mjs"
+    "demo": "node scripts/bare.js scripts/demo.js",
+    "make": "node scripts/bare.js scripts/make.js",
+    "make:linux-x64": "bare-build --host linux-x64 --standalone --name hive --out out/linux-x64 bin.mjs",
+    "make:linux-arm64": "bare-build --host linux-arm64 --standalone --name hive --out out/linux-arm64 bin.mjs",
+    "make:darwin-x64": "bare-build --host darwin-x64 --standalone --name hive --out out/darwin-x64 bin.mjs",
+    "make:darwin-arm64": "bare-build --host darwin-arm64 --standalone --name hive --out out/darwin-arm64 bin.mjs",
+    "make:win32-x64": "bare-build --host win32-x64 --standalone --name hive --out out/win32-x64 bin.mjs",
+    "make:win32-arm64": "bare-build --host win32-arm64 --standalone --name hive --out out/win32-arm64 bin.mjs",
+    "build": "npm run make"
   },
   "devDependencies": {
+    "bare-build": "^1.0.4",
     "bare-runtime": "^1.4.0",
     "brittle": "^4.1.0"
   },

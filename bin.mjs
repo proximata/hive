@@ -17,9 +17,17 @@ const appName = pkg.productName ?? pkg.name
 const isWindows = os.platform() === 'win32'
 const isDev = Bare.argv[1]?.endsWith('bin.mjs') ?? false
 
+// Argument vectors differ between running from source and running the built
+// binary: `bare bin.mjs --version` carries the entry script at argv[1], while
+// `./hive --version` does not. Slicing a fixed 2 ate the first real flag in the
+// standalone build, so `hive --version` printed usage instead of a version.
+// Drop the entry script only when it is actually there.
+const rest = Bare.argv.slice(1)
+const ARGV = /(^|[/\\])bin\.mjs$/.test(rest[0] ?? '') ? rest.slice(1) : rest
+
 // One parser for both modes: the relay flags and the CLI share a grammar, and
 // two parsers would inevitably disagree about something like `--content -`.
-const { positional, flags } = parseArgs(Bare.argv.slice(2))
+const { positional, flags } = parseArgs(ARGV)
 const mode = positional[0]
 
 const USAGE = `${appName} ${pkg.version} — ${pkg.description}
@@ -41,15 +49,19 @@ if (flags.version === true || flags.v === true) {
   Bare.exit(0)
 }
 
-// Anything that is not `relay` is a CLI command, so one binary covers both
-// "run the workspace" and "talk to a workspace".
-if ((flags.help === true || flags.h === true) && mode === undefined) {
+// `--help` prints usage whatever precedes it. Gating this on "no mode given"
+// meant `hive relay --help` fell straight through and booted a relay on :3000
+// instead of explaining itself.
+if (flags.help === true || flags.h === true) {
   console.log(USAGE)
   Bare.exit(0)
 }
 
+// Anything that is not `relay` is a CLI command, so one binary covers both
+// "run the workspace" and "talk to a workspace".
+
 if (mode !== undefined && mode !== 'relay') {
-  const result = await runCli(Bare.argv.slice(2), {
+  const result = await runCli(ARGV, {
     env: Bare.env ?? {},
     readStdin: readStdin
   })
