@@ -43,7 +43,7 @@ jobs:
         run: npm test 2>&1 | tail -50
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: coverage-${{ matrix.node-version }}-${{ matrix.bare-version }}
@@ -74,7 +74,7 @@ jobs:
         run: npm run build 2>&1 || echo "Build script not available yet"
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: hive-binary
