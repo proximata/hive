@@ -28,15 +28,17 @@ jobs:
             bare-runtime: 'latest'
           - node-version: '22'
             bare-runtime: 'latest'
-          # Test minimum supported bare-runtime version on Node 22
+          # Test minimum supported bare-runtime version on Node 22 (1.4.1 is first 1.4.x)
           - node-version: '22'
-            bare-runtime: '1.4.0'
+            bare-runtime: '1.4.1'
           # Test latest bare-runtime explicitly on Node 22
           - node-version: '22'
             bare-runtime: 'latest-explicit'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          submodules: false
 
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v7
@@ -78,6 +80,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          submodules: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
