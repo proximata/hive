@@ -28,9 +28,9 @@ jobs:
             bare-runtime: 'latest'
           - node-version: '22'
             bare-runtime: 'latest'
-          # Test minimum supported bare-runtime version on Node 22 (1.4.1 is first 1.4.x)
+          # Test a stable bare-runtime version (1.20.0 - same architecture as latest)
           - node-version: '22'
-            bare-runtime: '1.4.1'
+            bare-runtime: '1.20.0'
           # Test latest bare-runtime explicitly on Node 22
           - node-version: '22'
             bare-runtime: 'latest-explicit'
