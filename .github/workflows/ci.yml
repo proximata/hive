@@ -61,6 +61,15 @@ jobs:
             npm install bare-runtime@${{ matrix.bare-runtime }} --save-dev
           fi
 
+      - name: Fix bare binary permissions
+        run: |
+          # bare-runtime-linux-x64 binary may not have execute bit set in tarball
+          BARE_BIN=$(find node_modules -name "bare" -path "*/bare-runtime-linux-x64/bin/bare" 2>/dev/null | head -1)
+          if [ -n "$BARE_BIN" ]; then
+            chmod +x "$BARE_BIN"
+            echo "Fixed permissions for $BARE_BIN"
+          fi
+
       - name: Run lint
         run: npm run lint
 
