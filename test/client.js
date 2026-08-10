@@ -1,6 +1,7 @@
 'use strict'
 
 const ws = require('bare-ws')
+const { CompressedWebSocket } = require('hive-relay/lib/transports/ws-compression')
 
 const { buildAuthEvent } = require('hive-auth')
 const { parseRelayMessage } = require('hive-relay').protocol
@@ -23,16 +24,26 @@ class TestClient {
     this._close = null
   }
 
-  static async openWebSocket ({ port, host = '127.0.0.1' }) {
+  static async openWebSocket ({ port, host = '127.0.0.1', compression = false }) {
     const client = new TestClient()
     const socket = new ws.Socket({ port, host })
 
-    socket.on('data', (data) => client._receive(data.toString()))
     socket.on('close', () => { client.closed = true })
     socket.on('error', () => { client.closed = true })
 
-    client._send = (frame) => socket.write(frame)
-    client._close = () => socket.end()
+    // Wrap with compression if requested
+    let wrappedSocket = socket
+    if (compression) {
+      wrappedSocket = new CompressedWebSocket(socket, {
+        isServer: false
+      })
+    }
+
+    // Set up data listener on the wrapped socket (which handles decompression)
+    wrappedSocket.on('data', (data) => client._receive(data.toString()))
+
+    client._send = (frame) => wrappedSocket.write(frame)
+    client._close = () => wrappedSocket.end()
 
     await client.waitFor((m) => m.type === 'AUTH')
     return client
