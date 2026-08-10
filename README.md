@@ -30,40 +30,11 @@
 One command boots a relay, five identities and an agent, then plays the whole
 product against them — every line below arrived as a signed event:
 
-```
-╭─ Channels ─────────╮╭─ #engineering ─────────────────────────────────╮╭─ EVENT FLOW ─────────────╮
-│ > #engineering     ││                                                ││ ✓ 0 connection           │
-│   #design          ││                                                ││ ✓ 22242 auth alice       │
-│                    ││                                                ││ ✓ 9007 nip29 create grou │
-│                    ││                                                ││ ✓ 9007 nip29 create grou │
-│                    ││                                                ││ ✓ 9021 nip29 join reques │
-│                    ││                                                ││ ✓ 9021 nip29 join reques │
-│                    ││                                                ││ ✓ 9000 nip29 put user ad │
-│                    ││                                                ││ ✓ 0 connection           │
-│                    ││                                                ││ ✓ 22242 auth honey       │
-│                    ││                                                ││ ✓ 10100 agent profile ho │
-│                    ││                                                ││ ✓ 9 stream message alice │
-│                    ││   19:13 alice                                  ││ ✓ 9 stream message bob   │
-│                    ││    relay build 42 is green on the swarm        ││ ✓ 9 stream message honey │
-│                    ││    transport                                   ││ ✓ 9 stream message alice │
-│                    ││ ▸ 19:13 bob                                    ││ ✓ 9 stream message bob   │
-│                    ││ ▸  nice, I will take the flaky reconnect test  ││ ✓ 9 stream message alice │
-│                    ││ ▸  :tada: 1                                    ││ ✓ 7 reaction alice       │
-│                    ││ │ 19:13 honey                                  ││ ✓ 41010 dm open alice    │
-│                    ││ │  honey here - mention me and I answer in     ││ ✓ 1059 gift wrap alice   │
-│                    ││ │  this channel                                ││                          │
-│                    ││   19:13 alice                                  ││                          │
-│                    ││    who owns the deploy key for staging?        ││                          │
-│                    ││   19:13 bob                                    ││                          │
-│                    ││    I will deploy build 42 after lunch          ││                          │
-╰────────────────────╯│   19:13 alice                                  ││                          │
-╭─ DMs ──────────────╮│    deployment runbook lives in the canvas      ││                          │
-│   @alice, bob      ││ ❯ write a message                              ││ 1.5/s 2c 2s              │
-╰────────────────────╯╰──────────── 4 members · alice honey admin bob ─╯╰──────────────────────────╯
- carol is not in the p tag: the same lookup returns nothing for npub14a ↑↓ move · / search · q quit
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/proximata/hive/main/docs/demo-tui.gif" alt="Terminal recording of the Hive TUI: a channel list, the #engineering channel where humans alice and bob talk alongside the AI agent honey, and a live event-flow panel logging each signed Nostr event as it lands on the relay — NIP-42 auth, NIP-29 group create and join, kind 9 messages, a reaction, and a gift-wrapped DM." width="900"/>
+</p>
 
-> **Watch it play:** [`docs/demo-tui.cast`](docs/demo-tui.cast) — `asciinema play docs/demo-tui.cast`.
+> **Watch it play:** [`docs/demo-tui.cast`](docs/demo-tui.cast) — `asciinema play docs/demo-tui.cast`; [`docs/demo-tui.mp4`](docs/demo-tui.mp4) is the same run as video.
 > `scripts/record-demo.sh --tui` re-records it, and renders `docs/demo-tui.gif` when [agg](https://github.com/asciinema/agg) is installed.
 
 | Command | What it does |

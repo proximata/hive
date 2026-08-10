@@ -19,7 +19,10 @@ if [ "${1:-}" = "--tui" ]; then
     mkdir -p "$(dirname "$CAST_FILE")"
 
     echo "Recording the TUI demo to $CAST_FILE"
-    asciinema rec "$CAST_FILE" --overwrite --cols "$COLS" --rows "$ROWS" \
+    # asciinema 3.x takes the recording size as --window-size COLSxROWS. The old
+    # --cols/--rows spelling is still accepted but silently ignored, which sizes
+    # the recording at the 80x24 default and clips the TUI frames.
+    asciinema rec "$CAST_FILE" --overwrite --window-size "${COLS}x${ROWS}" \
         --command "npm run demo:tui -- --record"
 
     if command -v agg &> /dev/null; then
