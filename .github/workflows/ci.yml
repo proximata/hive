@@ -15,18 +15,30 @@ defaults:
 
 jobs:
   test:
-    name: Test (Node ${{ matrix.node-version }})
+    name: Test (Node ${{ matrix.node-version }}, bare-runtime ${{ matrix.bare-runtime }})
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        # The suites run under Bare, not Node, so Node's version only governs
-        # the tooling. 22 is the floor because the store's non-Bare driver is
-        # node:sqlite; 24 tracks current.
-        node-version: ['22', '24']
+        include:
+          # Node version matrix with default bare-runtime (^1.4.0 -> latest 1.x)
+          - node-version: '18'
+            bare-runtime: 'latest'
+          - node-version: '20'
+            bare-runtime: 'latest'
+          - node-version: '22'
+            bare-runtime: 'latest'
+          # Test minimum compatible bare-runtime version (1.28.0 - required by bare-fs)
+          - node-version: '22'
+            bare-runtime: '1.28.0'
+          # Test latest bare-runtime explicitly on Node 22
+          - node-version: '22'
+            bare-runtime: 'latest-explicit'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          submodules: false
 
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v7
@@ -36,19 +48,37 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        env:
+          # Override bare-runtime version for specific matrix entries
+          BARE_RUNTIME_VERSION: ${{ matrix.bare-runtime }}
+
+      - name: Adjust bare-runtime version if needed
+        if: matrix.bare-runtime != 'latest'
+        run: |
+          if [ "${{ matrix.bare-runtime }}" = "latest-explicit" ]; then
+            npm install bare-runtime@latest --save-dev
+          else
+            npm install bare-runtime@${{ matrix.bare-runtime }} --save-dev
+          fi
+
+      - name: Fix bare binary permissions
+        run: |
+          # bare-runtime-linux-x64 binary may not have execute bit set in tarball
+          BARE_BIN=$(find node_modules -name "bare" -path "*/bare-runtime-linux-x64/bin/bare" 2>/dev/null | head -1)
+          if [ -n "$BARE_BIN" ]; then
+            chmod +x "$BARE_BIN"
+            echo "Fixed permissions for $BARE_BIN"
+          fi
 
       - name: Run lint
         run: npm run lint
 
-      # No pipe, no `|| true`. If the suite fails, the job fails.
       - name: Run tests
         run: npm test
 
       - name: Run end-to-end demo
         run: npm run demo
 
-      # The same scenes the TUI plays, asserted against the relay and turned
-      # into an exit code. A pane that stops rendering fails the job too.
       - name: Run TUI demo scenes
         run: npm run demo:tui -- --demo
 
@@ -59,6 +89,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          submodules: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
