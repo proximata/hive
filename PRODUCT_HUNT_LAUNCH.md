@@ -5,7 +5,7 @@
 ### Repository Polish
 - [x] README.md with demo, badges, clear value prop
 - [x] Professional logo (docs/logo.svg)
-- [x] Demo recording (demo-structure.cast → demo-structure.svg)
+- [x] Demo recording (docs/demo-tui.cast → docs/demo-tui.gif + docs/demo-tui.mp4)
 - [x] SPEC.md as normative specification
 - [x] LICENSE (Apache-2.0)
 - [x] Contributing guidelines
@@ -40,7 +40,7 @@
 - [ ] **Description** (260 chars): "Hive is a wire-compatible analog of Block/Buzz built on Bare/ SQLite/ Hyperswarm/ QVAC. Agents are keypairs, not roles. Reachable via hyper://<pubkey> — no ports, no DNS."
 - [ ] **Topics**: `open-source`, `p2p`, `ai-agents`, `nostr`, `developer-tools`, `decentralized`
 - [ ] **Website**: https://github.com/proximata/hive
-- [ ] **Demo video/GIF**: Upload demo-structure.gif or link asciinema
+- [ ] **Demo video/GIF**: Upload docs/demo-tui.mp4 or link asciinema
 - [ ] **Screenshots**: Terminal demo, architecture diagram, workflow YAML
 - [ ] **Maker comment**: First comment with story + technical details
 
