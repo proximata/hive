@@ -28,9 +28,9 @@ jobs:
             bare-runtime: 'latest'
           - node-version: '22'
             bare-runtime: 'latest'
-          # Test a stable bare-runtime version (1.20.0 - same architecture as latest)
+          # Test minimum compatible bare-runtime version (1.28.0 - required by bare-fs)
           - node-version: '22'
-            bare-runtime: '1.20.0'
+            bare-runtime: '1.28.0'
           # Test latest bare-runtime explicitly on Node 22
           - node-version: '22'
             bare-runtime: 'latest-explicit'
