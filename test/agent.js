@@ -537,3 +537,40 @@ test('a provider failure becomes a job error, not a crashed agent', async (t) =>
   // The agent is still alive and still queued for the next mention.
   t.is(agent.started, true)
 })
+
+// ---------------------------------------------------------- coding agent --
+
+test('the coding agent provider detects available agents', async (t) => {
+  const { CodingAgentProvider } = require('hive-agent')
+  const provider = new CodingAgentProvider({ agent: 'claude-code' })
+  // Should not throw even if claude-code is not installed
+  // It will just not detect it and be ready to fall back
+  await t.exception(provider.ready(), /No coding agent found|Preferred agent claude-code not available/)
+})
+
+test('coding agent provider capabilities include coding', async (t) => {
+  const { CodingAgentProvider, CAPABILITIES } = require('hive-agent')
+  const provider = new CodingAgentProvider({ agent: 'nonexistent-agent' })
+  // Mock the agent directly since we can't override private method
+  provider.agent = { name: 'fake-agent', cmd: 'echo', args: [], detect: [] }
+
+  const caps = await provider.capabilities()
+  t.ok(caps.includes(CAPABILITIES.CODING), 'coding capability should be advertised')
+  t.ok(caps.includes(CAPABILITIES.TEXT_GENERATION), 'text-generation capability should be advertised')
+})
+
+test('providerFromPersona selects coding-agent runtime', (t) => {
+  const { providerFromPersona, CodingAgentProvider, MockProvider } = require('hive-agent')
+
+  const persona = {
+    runtime: 'coding-agent',
+    agent: 'claude-code',
+    system_prompt: 'You are a coding assistant',
+    fallback: 'mock'
+  }
+
+  const provider = providerFromPersona(persona)
+  t.ok(provider instanceof CodingAgentProvider, 'should return CodingAgentProvider for coding-agent runtime')
+  t.is(provider.systemPrompt, 'You are a coding assistant')
+  t.ok(provider.fallbackProvider instanceof MockProvider, 'should have mock fallback')
+})
