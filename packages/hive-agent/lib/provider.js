@@ -27,7 +27,8 @@ const CAPABILITIES = {
   TEXT_TO_SPEECH: 'text-to-speech',
   RAG: 'rag',
   IMAGE_GENERATION: 'image-generation',
-  TRANSLATION: 'translation'
+  TRANSLATION: 'translation',
+  CODING: 'coding'
 }
 
 class InferenceProvider {
