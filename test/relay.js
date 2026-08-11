@@ -15,7 +15,14 @@ const { identity, sign, message } = require('./helpers')
 async function harness (t, opts = {}) {
   const store = openStore(':memory:')
   const relay = new Relay(store, { url: 'ws://127.0.0.1', ...opts })
-  const transport = new WebSocketTransport(relay, { port: 0 })
+  const transport = new WebSocketTransport(relay, { 
+    port: 0,
+    compression: opts.compression !== false,
+    clientNoContextTakeover: opts.clientNoContextTakeover,
+    serverNoContextTakeover: opts.serverNoContextTakeover,
+    clientMaxWindowBits: opts.clientMaxWindowBits,
+    serverMaxWindowBits: opts.serverMaxWindowBits
+  })
 
   await transport.listen()
 
