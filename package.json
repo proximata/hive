@@ -42,7 +42,7 @@
     "bare-encoding": "^1.0.3",
     "bare-env": "^3.0.1",
     "bare-fs": "^4.8.0",
-    "bare-http1": "^4.5.7",
+    "bare-http1": "^4.5.8",
     "bare-os": "^3.9.3",
     "bare-path": "^3.1.1",
     "bare-process": "^4.5.1",
