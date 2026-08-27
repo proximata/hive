@@ -9,6 +9,32 @@ const { RelayConnection } = require('./connection')
 const { MockProvider } = require('./provider')
 const { providerFromPersona } = require('./qvac')
 
+// How far a chain of agent-to-agent replies may travel before it is cut.
+//
+// Every reply an agent makes p-tags whoever triggered it, and nothing in this
+// harness distinguishes a human sender from an agent one — which is exactly
+// what makes agent-to-agent work with no new protocol, and exactly what makes
+// two agents mentioning each other a guaranteed infinite loop. Measured before
+// this guard existed: 143 messages per second between two agents, content
+// compounding on every hop, terminated only by the relay's per-pubkey token
+// bucket.
+//
+// So each reply carries `["hop", "n"]` and an agent refuses to answer anything
+// already at the ceiling. 4 leaves room for human → A → B → human with slack.
+//
+// ponytail: the tag is self-signed and therefore forgeable — a hostile agent
+// can reset its own hop count to 0 forever. Ceiling accepted because it
+// terminates every honest topology and the rate limiter is still the
+// adversarial backstop. Upgrade path: have the relay stamp the hop on ingest by
+// reading it off the `e`-tagged parent, which a client cannot forge.
+const HOP_TAG = 'hop'
+const DEFAULT_MAX_HOPS = 4
+
+function hopOf (event) {
+  const value = Number(core.tagValue(event, HOP_TAG))
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
+}
+
 /**
  * The agent harness.
  *
@@ -44,7 +70,10 @@ class Agent extends EventEmitter {
     })
 
     this.historyLimit = opts.historyLimit ?? 12
+    this.maxHops = opts.maxHops ?? DEFAULT_MAX_HOPS
     this.queues = new Map() // channelId -> { pending: [], running: boolean }
+    this.handled = [] // recent trigger keys, newest last — see _triggerKey
+    this.handledLimit = opts.handledLimit ?? 256
     this.channels = new Set()
     this.started = false
   }
@@ -147,7 +176,43 @@ class Agent extends EventEmitter {
     // message is a chat bot, not a teammate.
     if (!core.referencedPubkeys(event).includes(this.pubkey)) return
 
+    // The loop guard. See HOP_TAG above: this is the only thing that stops two
+    // agents that mention each other, and it must come before the queue, not
+    // inside the turn — a dropped mention must cost nothing at all.
+    const hop = hopOf(event)
+    if (hop >= this.maxHops) {
+      this.emit('hop-limit', event, channelId, hop)
+      return
+    }
+
+    // One piece of work, answered once. A delegation lands twice by design — as
+    // the chat message the delegate is mentioned in, and as the kind-43001 job
+    // request that is the machine-readable half of the same act — and answering
+    // both produced two identical replies to the same person. Keyed on the event
+    // id the job request names, so the collapse is exact rather than a guess at
+    // similar content, and order-independent: whichever arrives second is the
+    // one dropped.
+    const key = this._triggerKey(event)
+    if (this.handled.includes(key)) {
+      this.emit('duplicate', event, channelId)
+      return
+    }
+    this.handled.push(key)
+    while (this.handled.length > this.handledLimit) this.handled.shift()
+
     this._enqueue(channelId, event)
+  }
+
+  /**
+   * What piece of work an incoming event represents.
+   *
+   * A job request names its subject in `d`; everything else is its own subject.
+   * A human-issued 43001 carries an opaque job id there, which is unique anyway,
+   * so this never collapses two genuinely different requests.
+   */
+  _triggerKey (event) {
+    if (event.kind !== core.KIND_JOB_REQUEST) return event.id
+    return core.tagValue(event, 'd') ?? event.id
   }
 
   /** Start watching a channel for mentions. Idempotent. */
@@ -208,6 +273,9 @@ class Agent extends EventEmitter {
     const trigger = batch[batch.length - 1]
     const jobId = trigger.id
     const startedAt = Date.now()
+    // Everything this turn emits sits one hop further out than what caused it.
+    const hop = Math.max(...batch.map(hopOf)) + 1
+    const hopTag = [HOP_TAG, String(hop)]
 
     await this._publishJobEvent(core.KIND_JOB_ACCEPTED, { channelId, jobId, requester: trigger.pubkey })
 
@@ -218,17 +286,50 @@ class Agent extends EventEmitter {
       let text = ''
       for await (const chunk of run.events) {
         if (chunk.type === 'contentDelta') text += chunk.text
+        // A provider that narrates its work gets that narration onto the log as
+        // ordinary job progress. Nothing invents a kind for it: 43003 has always
+        // meant "this job is partway through", it simply had no emitter.
+        else if (chunk.type === 'progress' && typeof chunk.text === 'string') {
+          await this._publishJobEvent(core.KIND_JOB_PROGRESS, {
+            channelId, jobId, requester: trigger.pubkey, content: chunk.text
+          })
+        }
       }
       const final = await run.final
       const content = (final?.content ?? text).trim()
+
+      // Recorded BEFORE the reply: if the relay refuses the reply, what the
+      // agent worked out still survives on the log instead of being lost with
+      // the turn that produced it.
+      if (final?.memo?.slug) await this._publish(events.engram(this.secretKey, final.memo))
+
+      // A provider may redirect the reply at a third party — that is the whole
+      // delegation mechanism. Absent, the reply answers whoever asked, as before.
+      const mentions = Array.isArray(final?.mentions) && final.mentions.length > 0
+        ? final.mentions
+        : [trigger.pubkey]
 
       const reply = events.message(this.secretKey, {
         channel: channelId,
         content: content.length > 0 ? content : '(no response)',
         replyTo: trigger.id,
-        mentions: [trigger.pubkey]
+        mentions,
+        extraTags: [hopTag]
       })
-      await this.connection.publish(reply)
+      await this._publish(reply)
+
+      // Handing work to another agent is a job request, the same kind a human
+      // client sends. The chat message above is what people read; this is the
+      // machine-readable half of the same act.
+      if (final?.delegate?.to) {
+        await this._publish(events.jobRequest(this.secretKey, {
+          channel: channelId,
+          agent: final.delegate.to,
+          prompt: final.delegate.prompt ?? content,
+          jobId: reply.id,
+          extraTags: [hopTag]
+        }))
+      }
 
       await this._publishJobEvent(core.KIND_JOB_RESULT, {
         channelId,
@@ -284,6 +385,24 @@ class Agent extends EventEmitter {
     }
 
     return history.slice(-this.historyLimit)
+  }
+
+  /**
+   * Publish, and treat a refusal as a failure.
+   *
+   * `RelayConnection.publish` resolves with the relay's OK frame whether or not
+   * it was accepted, so a rate-limited reply used to vanish while the turn went
+   * on to emit a kind-43004 job result pointing at an event the relay never
+   * stored — an audit log claiming work that does not exist. Measured: 80
+   * publishes, 22 refused, 0 raised. A turn that could not say what it worked
+   * out is a failed turn, and the catch in `turn()` records it as 43006.
+   */
+  async _publish (event) {
+    const ok = await this.connection.publish(event)
+    if (ok !== undefined && ok !== null && ok.accepted === false) {
+      throw new Error(`relay refused kind ${event.kind}: ${ok.reason || 'no reason given'}`)
+    }
+    return ok
   }
 
   async _publishJobEvent (kind, { channelId, jobId, requester, content = '' }) {

@@ -13,7 +13,10 @@ function build (secretKey, kind, tags, content) {
 const events = {
   // ------------------------------------------------------------- messages --
 
-  message (secretKey, { channel, content, replyTo = null, rootId = null, mentions = [] }) {
+  // `extraTags` exists so callers can attach a tag this builder has no opinion
+  // about — the agent harness's hop counter is the first — without rebuilding
+  // the h/e/p shape by hand and drifting from it.
+  message (secretKey, { channel, content, replyTo = null, rootId = null, mentions = [], extraTags = [] }) {
     const tags = [['h', channel]]
 
     if (replyTo !== null) {
@@ -22,6 +25,7 @@ const events = {
       tags.push(['e', replyTo, '', rootId === null || rootId === replyTo ? 'root' : 'reply'])
     }
     for (const pubkey of mentions) tags.push(['p', pubkey])
+    for (const tag of extraTags) tags.push(tag)
 
     return build(secretKey, core.KIND_STREAM_MESSAGE, tags, content)
   },
@@ -190,13 +194,29 @@ const events = {
     }))
   },
 
-  jobRequest (secretKey, { channel, agent, prompt, jobId }) {
+  jobRequest (secretKey, { channel, agent, prompt, jobId, extraTags = [] }) {
     return build(
       secretKey,
       core.KIND_JOB_REQUEST,
-      [['h', channel], ['p', agent], ['d', jobId]],
+      [['h', channel], ['p', agent], ['d', jobId], ...extraTags],
       prompt
     )
+  },
+
+  /**
+   * An agent's own memory: kind 30174, addressed by slug.
+   *
+   * Parameterized-replaceable, so writing the same slug twice replaces rather
+   * than appends, and `{ kinds: [30174], authors: [agent], '#d': [slug] }`
+   * reads it back. `hive-cli`'s `mem set` builds the same shape by hand; this
+   * is that shape in the one place that is supposed to know it.
+   *
+   * ⚠ Content is PLAINTEXT on the relay. SPEC §7.4 wants NIP-44 to the owner
+   * with a blinded `d`; nothing implements that yet, so never put anything
+   * private in here.
+   */
+  engram (secretKey, { slug, content }) {
+    return build(secretKey, core.KIND_AGENT_ENGRAM, [['d', slug]], content)
   },
 
   jobEvent (secretKey, kind, { channel, jobId, requester, content = '' }) {

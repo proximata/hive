@@ -2,7 +2,7 @@
 
 const { Agent } = require('./lib/agent')
 const { RelayConnection } = require('./lib/connection')
-const { InferenceProvider, MockProvider, CAPABILITIES } = require('./lib/provider')
+const { InferenceProvider, MockProvider, ScriptedProvider, CAPABILITIES } = require('./lib/provider')
 const { QvacProvider, providerFromPersona } = require('./lib/qvac')
 
 module.exports = {
@@ -10,6 +10,7 @@ module.exports = {
   RelayConnection,
   InferenceProvider,
   MockProvider,
+  ScriptedProvider,
   QvacProvider,
   providerFromPersona,
   CAPABILITIES

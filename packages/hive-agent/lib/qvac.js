@@ -157,7 +157,7 @@ function tryLoad () {
  * future client all agree.
  */
 function providerFromPersona (persona, opts = {}) {
-  const { MockProvider } = require('./provider')
+  const { MockProvider, ScriptedProvider } = require('./provider')
   const runtime = persona?.runtime ?? opts.defaultRuntime ?? 'mock'
 
   if (runtime === 'qvac') {
@@ -174,6 +174,16 @@ function providerFromPersona (persona, opts = {}) {
       model: persona?.model ?? 'mock-1',
       systemPrompt: persona?.system_prompt ?? null,
       ...opts.mock
+    })
+  }
+
+  // Routes cannot come from a persona document — they are pubkeys, resolved at
+  // wiring time — so `opts.scripted` carries them.
+  if (runtime === 'scripted') {
+    return new ScriptedProvider({
+      name: persona?.slug ?? persona?.display_name ?? 'agent',
+      systemPrompt: persona?.system_prompt ?? null,
+      ...opts.scripted
     })
   }
 
