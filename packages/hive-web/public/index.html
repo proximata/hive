@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hive</title>
+<link rel="stylesheet" href="/tokens.css">
+<!-- No favicon: without this the browser requests /favicon.ico, which falls
+     through the router into the authenticated area and logs a 401. -->
+<link rel="icon" href="data:,">
+
+<!--
+  The web client: three panels, the same three the TUI draws — channels,
+  transcript, event flow. No build step, no framework, no bundler; the relay
+  serves this directory and the browser imports the modules directly.
+
+  Colours, type and rhythm all come from tokens.css. Nothing below declares a
+  colour: everything here is geometry, which is the part tokens.css deliberately
+  does not own.
+-->
+<style>
+  /* The shell is the only layout in the app. Panels come from tokens.css. */
+  body {
+    block-size: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #banner,
+  #statusbar {
+    flex: none;
+    padding-inline: 1ch;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* The TUI's banner is full-width coloured text with one leading space — no
+     fill, no bar. */
+  #banner {
+    padding-block: 0.25rem;
+    display: flex;
+    gap: 2ch;
+    align-items: baseline;
+  }
+
+  #banner h1 {
+    margin: 0;
+    font: inherit;
+    font-weight: 700;
+  }
+
+  #banner .spacer { margin-inline-start: auto; }
+
+  /* SGR 7. The status bar is the only inverse surface in the language, and it
+     is always the last row. */
+  #statusbar {
+    background: var(--fg);
+    color: var(--bg);
+    padding-block: 0.1rem;
+  }
+
+  /* An error is never allowed to be a silent empty panel, so it gets a row of
+     its own above everything. Hidden via [hidden], which also hides it from the
+     accessibility tree. */
+  #error {
+    flex: none;
+    margin: 0;
+    padding: 0.25rem 1ch;
+    color: var(--fail);
+    border-block-end: 1px solid var(--fail);
+    white-space: pre-wrap;
+  }
+
+  /* User view at 120 cols: 26 / rest / 34, and the columns ABUT — the TUI joins
+     them with no gutter so the borders read as ││. gap:0 reproduces that. */
+  #shell {
+    flex: 1;
+    min-block-size: 0;
+    display: grid;
+    grid-template-columns: var(--col-nav) minmax(0, 1fr) var(--col-aside);
+    gap: 0;
+  }
+
+  /* Channels first, members bounded: the TUI never lets the second box in this
+     column take more than a third, because the channel list is the primary
+     navigation. */
+  #shell > .col {
+    min-inline-size: 0;
+    display: grid;
+    grid-template-rows: 1fr minmax(6rem, 33%);
+  }
+
+  /* Panels are flex columns so exactly one child scrolls and the border stays
+     put. tokens.css owns the border, padding and legend; this owns the axis.
+     Deliberately NOT overflow:hidden — .panel-foot straddles the bottom border
+     by design, and clipping the panel cuts it in half. */
+  #shell .panel {
+    display: flex;
+    flex-direction: column;
+    min-block-size: 0;
+  }
+
+  .scroll {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* Tail-anchored, like the TUI's transcript: the newest turn is the one that
+     has to be on screen, so short content sits at the bottom rather than the
+     top. */
+  .scroll.tail {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .scroll.tail > :first-child { margin-block-start: auto; }
+
+  ul, ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* Channel and member rows are real buttons: focusable, enter/space activated,
+     announced as buttons. Stripped to text, because the TUI has no chrome for
+     a list row — selection is a ▸ and a colour. */
+  .rowbtn {
+    display: flex;
+    gap: 1ch;
+    inline-size: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .rowbtn[aria-current="true"] { color: var(--accent); }
+  .rowbtn .badge { margin-inline-start: auto; color: var(--muted); }
+
+  .time { color: var(--muted); }
+  .author { font-weight: 700; }
+  .row[data-turn="agent"] .author { color: var(--agent); font-weight: 400; }
+  /* text-indent inherits, and .row hangs its first line back by the gutter. The
+     message body is a block of its own, so it would inherit that hang and start
+     left of the author it belongs to. Zeroing it puts the body under the name,
+     one gutter plus one indent in — the TUI's `gutter + ' '.repeat(INDENT)`. */
+  .msg { margin: 0; text-indent: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .empty { color: var(--muted); }
+
+  /* The flow is one event per line, never wrapped: the TUI truncates so the
+     pane shows history rather than wrapped tails. */
+  #flow li {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #flow .kind { color: var(--fg); }
+  #flow .who { color: var(--muted); }
+  #flow .note { color: var(--fail); }
+
+  .presence[data-presence="online"] { color: var(--ok); }
+  .presence[data-presence="away"] { color: var(--warn); }
+  .presence[data-presence="offline"] { color: var(--muted); }
+
+  #composer {
+    flex: none;
+    display: flex;
+    gap: 1ch;
+    align-items: baseline;
+    padding-block: 0.25rem;
+  }
+
+  #composer .prompt { color: var(--accent); }
+
+  #composer input {
+    flex: 1;
+    min-inline-size: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+  }
+
+  #composer input::placeholder { color: var(--muted); opacity: 1; }
+  #composer input:disabled { color: var(--muted); }
+
+  #composer button {
+    border: 1px solid var(--muted);
+    border-radius: var(--radius);
+    background: none;
+    color: inherit;
+    font: inherit;
+    padding-inline: 1ch;
+    cursor: pointer;
+  }
+
+  #composer button:disabled { color: var(--muted); cursor: not-allowed; }
+
+  /* Below the TUI's own DROP_RIGHT_BELOW/DROP_LEFT_BELOW thresholds (100 and 60
+     cols ≈ 860 and 520 px at the recorded 14px cell) the columns cannot hold
+     their content. The TUI drops them; a page can stack instead, which loses
+     nothing. Custom properties are not valid in a media query, hence literals. */
+  @media (max-width: 860px) {
+    #shell {
+      grid-template-columns: 1fr;
+      grid-auto-rows: minmax(12rem, auto);
+      overflow-y: auto;
+    }
+  }
+</style>
+
+<!--
+  Bare specifiers, mapped to the relay's /vendor/ mount. The same @noble the
+  relay verifies signatures with, served from node_modules rather than copied
+  into the repo where it would drift out of step with package.json.
+-->
+<script type="importmap">
+{
+  "imports": {
+    "@noble/curves/": "/vendor/curves/",
+    "@noble/hashes/": "/vendor/hashes/"
+  }
+}
+</script>
+<script type="module" src="/app.js"></script>
+</head>
+
+<body>
+<header id="banner">
+  <h1>Hive</h1>
+  <span id="relay-name" class="empty">connecting…</span>
+  <span class="spacer"></span>
+  <span id="identity" class="empty"></span>
+</header>
+
+<p id="error" role="alert" hidden></p>
+
+<div id="shell">
+  <div class="col">
+    <fieldset class="panel">
+      <legend><h2>Channels</h2></legend>
+      <nav class="scroll" aria-label="Channels">
+        <ul id="channels"><li class="empty">loading…</li></ul>
+      </nav>
+      <p class="panel-foot" id="channels-foot"></p>
+    </fieldset>
+
+    <fieldset class="panel">
+      <legend><h2>Members</h2></legend>
+      <div class="scroll">
+        <ul id="members"><li class="empty">no channel selected</li></ul>
+      </div>
+      <p class="panel-foot" id="members-foot"></p>
+    </fieldset>
+  </div>
+
+  <fieldset class="panel">
+    <legend><h2 id="channel-title">no channel</h2></legend>
+    <main class="scroll tail" aria-label="Transcript">
+      <ol id="transcript"><li class="empty">loading…</li></ol>
+    </main>
+    <form id="composer" autocomplete="off">
+      <span class="prompt" aria-hidden="true">❯</span>
+      <label class="visually-hidden" for="compose-input">Message</label>
+      <input id="compose-input" name="message" placeholder="write a message" disabled>
+      <button type="submit" disabled>send</button>
+    </form>
+    <p class="panel-foot" id="transcript-foot"></p>
+  </fieldset>
+
+  <fieldset class="panel">
+    <legend><h2>EVENT FLOW</h2></legend>
+    <aside class="scroll tail" aria-label="Event flow">
+      <ol id="flow" aria-live="polite" aria-relevant="additions">
+        <li class="empty">waiting for events</li>
+      </ol>
+    </aside>
+    <p class="panel-foot" id="flow-foot"></p>
+  </fieldset>
+</div>
+
+<footer id="statusbar" role="status">starting…</footer>
+
+<style>
+  /* Visually hidden, still announced. One rule, one call site: the composer
+     label, which the placeholder must not be doing the job of. */
+  .visually-hidden {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+</style>
+</body>
+</html>

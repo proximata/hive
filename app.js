@@ -22,7 +22,10 @@ class App extends ReadyResource {
     this.version = opts.version ?? '0.0.0-0'
     this.upgrade = opts.upgrade ?? ''
     this.name = opts.name ?? 'hive'
+    this.host = opts.host ?? '127.0.0.1'
     this.port = opts.port ?? 3000
+    this.publicUrl = opts.publicUrl ?? null
+    this.webDir = opts.webDir ?? null
     this.swarm = opts.swarm !== false
 
     this.url = null
@@ -43,7 +46,13 @@ class App extends ReadyResource {
       this.dir,
       this.app ?? '',
       String(this.port),
-      String(this.swarm)
+      String(this.swarm),
+      // Appended, never inserted: the worker destructures Bare.argv
+      // positionally, so a new argument in the middle would silently shift
+      // every later one.
+      this.host,
+      this.publicUrl ?? '',
+      this.webDir ?? ''
     ])
 
     this.pipe = new FramedStream(this.IPC)
