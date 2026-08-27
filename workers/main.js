@@ -8,6 +8,9 @@
 
 const path = require('bare-path')
 const fs = require('bare-fs')
+// Not `Bare.env`, which is undefined here: the two authorization switches below
+// read as false whatever the environment said, so neither could be turned on.
+const env = require('bare-env')
 const FramedStream = require('framed-stream')
 
 const { openStore } = require('hive-store')
@@ -26,12 +29,21 @@ const [
   dir,
   app,
   portArg,
-  swarmArg
+  swarmArg,
+  hostArg,
+  publicUrlArg,
+  webDirArg
 ] = Bare.argv
 
 const updates = updatesArg !== 'false'
-const port = Number(portArg) || 3000
+// Not `|| 3000`: port 0 is meaningful (let the OS pick), and the old form
+// turned an explicit --port 0 back into 3000 here after bin.mjs had honoured it.
+const port = Number.isInteger(Number(portArg)) ? Number(portArg) : 3000
 const swarmEnabled = swarmArg !== 'false'
+// bin.mjs validated these; the fallback is only for a worker started by hand.
+const host = hostArg === undefined || hostArg === '' ? '127.0.0.1' : hostArg
+const publicUrl = publicUrlArg === undefined || publicUrlArg === '' ? null : publicUrlArg
+const webDir = webDirArg === undefined || webDirArg === '' ? null : webDirArg
 
 const pipe = new FramedStream(Bare.IPC)
 const say = (type, payload = {}) => {
@@ -40,6 +52,29 @@ const say = (type, payload = {}) => {
   } catch {
     // The host may already be gone during shutdown.
   }
+}
+
+/**
+ * The directory to serve the web client from, or null for API-only.
+ *
+ * An explicit --web-dir is taken at its word and must exist: a deploy that
+ * points at the wrong path should say so at boot, not answer 404 for the page
+ * while /health stays green. Without the flag this looks for the source tree,
+ * which only resolves in a dev run.
+ */
+function resolveWebDir () {
+  if (webDir !== null) {
+    const resolved = path.resolve(webDir)
+    if (!fs.existsSync(path.join(resolved, 'index.html'))) {
+      throw new Error(`--web-dir has no index.html: ${resolved}`)
+    }
+    return resolved
+  }
+
+  // __dirname is inside the bundle for a standalone binary, so this join
+  // simply does not exist there and the check falls through to null.
+  const fromSource = path.join(__dirname, '..', 'packages', 'hive-web', 'public')
+  return fs.existsSync(path.join(fromSource, 'index.html')) ? fromSource : null
 }
 
 async function main () {
@@ -55,11 +90,11 @@ async function main () {
 
   const relay = new Relay(store, {
     secretKey,
-    url: `ws://127.0.0.1:${port}`,
+    url: publicUrl ?? `ws://${host}:${port}`,
     name,
     rateLimiter: new RateLimiter({ tier: 'human' }),
-    requireRelayMembership: Bare.env?.HIVE_REQUIRE_RELAY_MEMBERSHIP === 'true',
-    requireAllowlist: Bare.env?.HIVE_PUBKEY_ALLOWLIST === 'true'
+    requireRelayMembership: env.HIVE_REQUIRE_RELAY_MEMBERSHIP === 'true',
+    requireAllowlist: env.HIVE_PUBKEY_ALLOWLIST === 'true'
   })
 
   relay.workflowEngine = new WorkflowEngine(relay)
@@ -76,9 +111,34 @@ async function main () {
     }
   }
 
-  const wsTransport = new WebSocketTransport(relay, { port, mediaStore })
+  // The web client is a directory on disk, not a bundled asset.
+  //
+  // require.asset() cannot carry it. Bare links any .js asset as a module at
+  // startup, and the browser's app.js imports '@noble/curves/secp256k1.js',
+  // which is a bare specifier the *browser* resolves through an import map.
+  // Bare tries to resolve it from the unpacked asset directory, where no
+  // node_modules exists, and the process dies before it listens:
+  //   Uncaught ModuleTraverseError: MODULE_NOT_FOUND: Cannot find module
+  //   '@noble/curves/secp256k1.js' imported from '/tmp/hive-<sha>/.../app.js'
+  // A directory asset fails the same way. @noble also has to reach the browser
+  // as real files, which a bundle cannot provide either.
+  //
+  // So: --web-dir points at a directory, and it ships next to the binary.
+  // Unset, it falls back to the source tree, which is what a dev run wants and
+  // what a standalone binary will not find — in which case no web client is
+  // served and every API route behaves exactly as before.
+  const publicDir = resolveWebDir()
+  if (publicDir === null) say('notice', { message: 'no web client directory; serving the API only' })
+
+  const wsTransport = new WebSocketTransport(relay, { host, port, publicUrl, mediaStore, publicDir })
   await wsTransport.listen()
-  say('listening', { url: `http://127.0.0.1:${wsTransport.port}`, port: wsTransport.port })
+  // Report the URL that was actually bound, including the port the OS picked
+  // for --port 0, and the public origin when one is configured.
+  say('listening', {
+    url: relay.url.replace(/^ws/, 'http'),
+    host,
+    port: wsTransport.port
+  })
 
   let swarmTransport = null
   if (swarmEnabled) {

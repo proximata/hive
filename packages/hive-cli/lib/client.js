@@ -1,6 +1,7 @@
 'use strict'
 
 const http = require('bare-http1')
+const https = require('bare-https')
 const b4a = require('b4a')
 
 const { buildNip98Header } = require('hive-auth')
@@ -86,7 +87,14 @@ class RelayClient {
 
 function send (target, method, headers, payload) {
   return new Promise((resolve, reject) => {
-    const req = http.request(
+    // bare-http1 speaks cleartext only. It happily derives port 443 from an
+    // https: URL and then sends a plaintext request at the TLS listener, which
+    // answers `400 Bad Request: Client sent an HTTP request to an HTTPS server`
+    // in HTML — no `message` field, so every call against a TLS-fronted relay
+    // surfaced as the opaque `relay returned 400`. The scheme picks the module.
+    const secure = target.protocol === 'https:'
+    const agent = secure ? https : http
+    const req = agent.request(
       {
         host: target.hostname,
         port: Number(target.port) || (target.protocol === 'https:' ? 443 : 80),

@@ -18,10 +18,19 @@ class WebSocketTransport {
   constructor (relay, opts = {}) {
     this.relay = relay
     this.port = opts.port ?? 3000
+    // Loopback unless the caller says otherwise. Every path that widens this
+    // starts at an explicit --host; see packages/hive-relay/lib/bind.js.
     this.host = opts.host ?? '127.0.0.1'
+    // The origin clients reach, when it differs from the bind address because
+    // a TLS proxy terminates in front. NIP-98 binds signatures to the full
+    // request URL, so relay.url has to be the public one or nothing verifies.
+    this.publicUrl = opts.publicUrl ?? null
     this.mediaStore = opts.mediaStore ?? null
 
-    this.router = createRestRouter(relay, { mediaStore: this.mediaStore })
+    this.router = createRestRouter(relay, {
+      mediaStore: this.mediaStore,
+      publicDir: opts.publicDir ?? null
+    })
     this.server = http.createServer((req, res) => this._onrequest(req, res))
     this.wss = new ws.Server({ server: this.server }, (socket) => this._onconnection(socket))
     this.sockets = new Set()
@@ -33,7 +42,7 @@ class WebSocketTransport {
       this.server.listen(this.port, this.host, () => {
         const address = this.server.address()
         this.port = address.port
-        this.relay.url = `ws://${this.host}:${this.port}`
+        this.relay.url = this.publicUrl ?? `ws://${this.host}:${this.port}`
         resolve(address)
       })
     })
@@ -94,7 +103,10 @@ class WebSocketTransport {
     try {
       await this.router(req, res)
     } catch (err) {
-      this.relay.emit('error', err)
+      // Guarded: EventEmitter rethrows an 'error' with no listener, so an
+      // unhandled request error used to take the whole process down before the
+      // 500 was ever written. One malformed request must not be a kill switch.
+      if (this.relay.listenerCount('error') > 0) this.relay.emit('error', err)
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ error: 'internal', message: err.message }))

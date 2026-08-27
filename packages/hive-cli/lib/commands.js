@@ -305,6 +305,33 @@ const commands = {
     return ctx.client.get('/api/users')
   },
 
+  /**
+   * Declare this key a machine participant: kind 10100, SPEC.md §agents.
+   *
+   * `users set-profile` writes kind 0 and makes you look like a person. Without
+   * this, an agent driving the CLI joins as an indistinguishable human - the
+   * clients read 10100 and nothing else to decide who is a machine.
+   *
+   * `--owner` defaults to your own pubkey, which the clients treat as "unowned"
+   * and render as a plain [agent]. Naming the human you act for is what turns
+   * that into [agent · alice], and it is a self-signed claim, not a proof:
+   * nothing verifies the owner consented.
+   */
+  'users set-agent-profile': async (ctx) => {
+    const event = events.agentProfile(ctx.secretKey, {
+      owner: ctx.flags.owner === undefined
+        ? core.getPublicKey(ctx.secretKey)
+        : v.pubkey(ctx.flags.owner, 'owner'),
+      persona: ctx.flags.persona ?? ctx.flags.name ?? null,
+      runtime: ctx.flags.runtime ?? null,
+      capabilities: list(ctx.flags.capability),
+      models: list(ctx.flags.model)
+    })
+
+    await ctx.client.publish(event)
+    return event
+  },
+
   'users presence': async (ctx) => ctx.client.get('/api/presence', {
     pubkey: list(ctx.flags.pubkey).map((p) => v.pubkey(p))
   }),

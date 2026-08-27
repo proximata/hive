@@ -2,9 +2,21 @@
 
 const b4a = require('b4a')
 
-const { LIMITS, normalizeFilter, checkPGatedAuthorization } = require('hive-core')
+const core = require('hive-core')
+const { LIMITS, normalizeFilter, checkPGatedAuthorization } = core
 const { validateNip98, AuthContext, allScopes } = require('hive-auth')
 const { channelsFromFilters } = require('./subscriptions')
+const { createStaticServer, nobleDir } = require('./static')
+
+// kind -> human label, derived from the registry rather than restated, exactly
+// as the TUI's flow pane does it (scripts/lib/demo/world.js:44). A browser
+// cannot require('hive-core'), and a hand-written copy of ~120 kind names in a
+// client is the drift this derivation exists to prevent.
+const KIND_LABELS = Object.fromEntries(
+  Object.entries(core)
+    .filter(([name, value]) => name.startsWith('KIND_') && typeof value === 'number')
+    .map(([name, value]) => [value, name.slice(5).toLowerCase().replace(/_/g, ' ')])
+)
 
 const MAX_BODY_BYTES = LIMITS.MAX_MEDIA_BYTES
 
@@ -52,8 +64,24 @@ function authenticate (relay, req, url, body) {
   return result
 }
 
+/** Whether the store still answers a query, as opposed to merely not having been closed. */
+function storeAnswers (relay) {
+  if (relay.store === null || relay.store === undefined || relay.store.closed) return false
+  try {
+    return relay.store.db.prepare('SELECT 1 AS ok').get()?.ok === 1
+  } catch {
+    return false
+  }
+}
+
 function createRestRouter (relay, opts = {}) {
   const mediaStore = opts.mediaStore ?? null
+
+  // Static hosting is opt-in: a relay with no web client configured behaves
+  // exactly as before, including the 426 on GET /.
+  const serveStatic = opts.publicDir === undefined || opts.publicDir === null
+    ? null
+    : createStaticServer({ dir: opts.publicDir, vendor: nobleDir(opts.publicDir) })
 
   return async function route (req, res) {
     const base = relay.url.replace(/^ws/, 'http')
@@ -69,16 +97,36 @@ function createRestRouter (relay, opts = {}) {
         res.end(JSON.stringify(relay.info()))
         return
       }
+      // A browser asking for / gets the web client; WebSocket upgrades never
+      // reach here (bare-ws takes them off the server first).
+      if (serveStatic !== null && await serveStatic(req, res, '/')) return
       return json(res, 426, { error: 'upgrade_required', message: 'connect with a WebSocket' })
     }
 
-    if (req.method === 'GET' && (path === '/health' || path === '/_liveness')) {
+    // Liveness answers only "this process is still serving HTTP", which is all
+    // it is asked and all a restart policy needs. Reaching this line already
+    // proves the transport is listening, so there is nothing further to check.
+    if (req.method === 'GET' && path === '/_liveness') {
       return json(res, 200, { status: 'ok', connections: relay.connections.size })
     }
 
-    if (req.method === 'GET' && path === '/_readiness') {
-      const ready = relay.store !== null && !relay.store.closed
-      return json(res, ready ? 200 : 503, { status: ready ? 'ready' : 'not-ready' })
+    // Readiness and /health both have to touch the store, and both answer the
+    // same thing, because /health is what an operator actually curls.
+    //
+    // `store.closed` is a flag the store sets on its own way out; it stays
+    // false for a database that died underneath it. A probe that read only the
+    // flag reported 200 while every real request threw DATABASE_NOT_OPEN, and a
+    // readiness probe that lies is worse than none: it is what the supervisor
+    // trusts when deciding whether to restart. One trivial query cannot lie.
+    if (req.method === 'GET' && (path === '/health' || path === '/_readiness')) {
+      const ready = storeAnswers(relay)
+      return json(res, ready ? 200 : 503, {
+        status: ready ? 'ready' : 'not-ready',
+        // Deliberately not the driver's error text: this endpoint is
+        // unauthenticated, and a SQLite message carries the database path.
+        store: ready ? 'ok' : 'unavailable',
+        connections: relay.connections.size
+      })
     }
 
     if (req.method === 'GET' && path === '/.well-known/nostr.json') {
@@ -108,6 +156,13 @@ function createRestRouter (relay, opts = {}) {
       res.end(req.method === 'HEAD' ? undefined : blob)
       return
     }
+
+    // The web client: markup, CSS, one ES module and the crypto it imports.
+    // Unauthenticated on purpose — the page has to load before the browser has
+    // a key, and it carries nothing a reader could not get from the repo. Every
+    // byte it then reads still goes through NIP-98 or NIP-42 like any other
+    // client. A miss returns false and falls through to the routes below.
+    if (serveStatic !== null && await serveStatic(req, res, path)) return
 
     // Stubbed surfaces. They answer 501 rather than 404 so a client can tell
     // "this relay does not do that yet" from "wrong URL".
@@ -278,7 +333,13 @@ function createRestRouter (relay, opts = {}) {
         ...relay.info(),
         swarm: relay.swarmKey ?? null,
         connections: relay.connections.size,
-        subscriptions: relay.subscriptions.size
+        subscriptions: relay.subscriptions.size,
+        // For clients outside the module graph — the browser one. `kinds` is
+        // the label registry; `pGatedKinds` is the subset a global REQ may not
+        // ask for, so a client can build a legal firehose filter instead of
+        // guessing and getting CLOSED.
+        kinds: KIND_LABELS,
+        pGatedKinds: core.P_GATED_KINDS
       })
     }
 

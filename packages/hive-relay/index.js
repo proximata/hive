@@ -7,6 +7,7 @@ const handlers = require('./lib/handlers')
 const { MediaStore } = require('./lib/media')
 const { WebSocketTransport } = require('./lib/transports/ws')
 const { SwarmTransport } = require('./lib/transports/swarm')
+const { resolveBind, isLoopback, DEFAULT_HOST, DEFAULT_PORT } = require('./lib/bind')
 
 module.exports = {
   Relay,
@@ -17,5 +18,9 @@ module.exports = {
   handlers,
   MediaStore,
   WebSocketTransport,
-  SwarmTransport
+  SwarmTransport,
+  resolveBind,
+  isLoopback,
+  DEFAULT_HOST,
+  DEFAULT_PORT
 }

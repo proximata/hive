@@ -4,7 +4,7 @@ const test = require('brittle')
 const core = require('hive-core')
 
 const { openStore } = require('hive-store')
-const { Relay, WebSocketTransport } = require('hive-relay')
+const { Relay, WebSocketTransport, resolveBind } = require('hive-relay')
 const { buildAuthEvent } = require('hive-auth')
 
 const { TestClient } = require('./client')
@@ -319,6 +319,103 @@ test('health and readiness probes answer', async (t) => {
     const response = await request(`http://127.0.0.1:${h.port}${path}`)
     t.is(response.status, 200, path)
   }
+})
+
+test('readiness reports the store, not a flag', async (t) => {
+  const h = await harness(t)
+
+  const before = await request(`http://127.0.0.1:${h.port}/health`)
+  t.is(before.status, 200)
+  t.is(before.json.store, 'ok')
+
+  // Kill the database out from under the store without going through close(),
+  // which is what a probe reading `store.closed` cannot see. The old probe
+  // answered 200 here while every real request threw DATABASE_NOT_OPEN.
+  h.store.db.close()
+
+  const after = await request(`http://127.0.0.1:${h.port}/health`)
+  t.is(after.status, 503, 'a dead database is not healthy')
+  t.is(after.json.store, 'unavailable')
+  t.absent(JSON.stringify(after.json).includes('DATABASE_NOT_OPEN'), 'no driver detail on an unauthenticated probe')
+
+  // Liveness is a different question and still answers: the process is up.
+  const live = await request(`http://127.0.0.1:${h.port}/_liveness`)
+  t.is(live.status, 200, 'liveness is about the process, not the store')
+
+  // The handle is gone, so tell the store's own close() to skip it; the shared
+  // teardown would otherwise throw DATABASE_NOT_OPEN closing it twice.
+  h.store.closed = true
+})
+
+// ------------------------------------------------------------- bind host --
+
+// The regression this guards: a relay that binds 0.0.0.0 by default puts a
+// write endpoint on every dev's LAN, silently, with nothing on screen to say
+// so. Assert the default at both levels — the flag resolver bin.mjs calls, and
+// the socket the transport actually opens.
+
+test('the default bind is loopback and only --host widens it', (t) => {
+  const bare = resolveBind({}, {})
+  t.is(bare.host, '127.0.0.1', 'no flags, no env: loopback')
+  t.is(bare.port, 3000)
+  t.is(bare.publicUrl, null)
+  t.ok(bare.loopback)
+
+  // No other flag may widen it as a side effect.
+  const noisy = resolveBind({ port: '8080', storage: '/tmp/x', swarm: false, updates: false, publicUrl: 'https://hive.example.com' }, {})
+  t.is(noisy.host, '127.0.0.1', 'unrelated flags do not change the bind address')
+  t.is(noisy.port, 8080)
+  t.is(noisy.publicUrl, 'wss://hive.example.com', 'https becomes wss; relay.url is ws-shaped')
+
+  // Env is a lever too, so it gets the same scrutiny; the flag still wins.
+  t.is(resolveBind({}, { HIVE_RELAY_HOST: '0.0.0.0' }).host, '0.0.0.0')
+  t.is(resolveBind({}, { HIVE_RELAY_HOST: '0.0.0.0' }).loopback, false)
+  t.is(resolveBind({ host: '127.0.0.1' }, { HIVE_RELAY_HOST: '0.0.0.0' }).host, '127.0.0.1', 'flag beats env')
+
+  const open = resolveBind({ host: '0.0.0.0' }, {})
+  t.is(open.host, '0.0.0.0', 'explicit --host is honoured')
+  t.absent(open.loopback, 'and is reported as not loopback, so bin.mjs can say so')
+
+  // Malformed input fails fast rather than falling back to a default: a typo
+  // becoming 0.0.0.0 is the exact accident this module exists to prevent.
+  t.exception(() => resolveBind({ host: true }, {}), /--host requires a value/)
+  t.exception(() => resolveBind({ host: 'a b' }, {}), /--host must be an address/)
+  t.exception(() => resolveBind({ port: 'http' }, {}), /--port must be an integer/)
+  t.exception(() => resolveBind({ port: '70000' }, {}), /--port must be an integer/)
+  t.exception(() => resolveBind({ publicUrl: 'hive.example.com' }, {}), /--public-url must be an absolute URL/)
+  t.exception(() => resolveBind({ publicUrl: 'https://h/prefix' }, {}), /--public-url must be an origin/)
+
+  // --port 0 means "pick one", which the old `Number(flags.port) || 3000`
+  // turned into 3000. The tests below depend on 0 meaning 0.
+  t.is(resolveBind({ port: '0' }, {}).port, 0)
+})
+
+test('the transport opens a loopback socket when no host is given', async (t) => {
+  const h = await harness(t)
+
+  const address = h.transport.address()
+  t.is(address.address, '127.0.0.1', 'listening socket is loopback, not 0.0.0.0')
+  t.is(h.transport.host, '127.0.0.1')
+  t.is(h.relay.url, `ws://127.0.0.1:${h.port}`, 'relay.url follows the bind address')
+})
+
+test('--public-url becomes relay.url so NIP-98 verifies behind a proxy', async (t) => {
+  const store = openStore(':memory:')
+  const relay = new Relay(store, { url: 'ws://127.0.0.1' })
+  const transport = new WebSocketTransport(relay, { port: 0, publicUrl: 'wss://hive.example.com' })
+  t.teardown(async () => {
+    relay.close()
+    await transport.close()
+    store.close()
+  })
+
+  await transport.listen()
+  t.is(transport.address().address, '127.0.0.1', 'a public URL does not widen the bind address')
+  t.is(relay.url, 'wss://hive.example.com', 'clients sign against the origin they reached')
+
+  // rest.js resolves request URLs against this, and NIP-98 compares the result
+  // to the signed `u` tag character for character.
+  t.is(relay.url.replace(/^ws/, 'http'), 'https://hive.example.com')
 })
 
 test('stubbed surfaces answer 501, not 404', async (t) => {
