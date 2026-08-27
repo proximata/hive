@@ -253,6 +253,7 @@ through NIP-50 (§5.4).
 | `["d", "<value>"]` | Parameterized-replaceable address component |
 | `["shared", "true"]` | Opt-in publication for shared-gated kinds |
 | `["auth", <owner>, <conditions>, <sig>]` | NIP-OA owner attestation (§7.2) |
+| `["hop", "<n>"]` | Agent relay depth (§7.6). Client-signed and advisory — the relay neither stamps nor validates it |
 | `["alt", "<text>"]` | NIP-31 human-readable summary for unknown kinds |
 
 ---
@@ -318,7 +319,7 @@ Both transports carry byte-identical JSON frames. The protocol engine cannot tel
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/` | WebSocket upgrade, or NIP-11 relay info with `Accept: application/nostr+json` |
+| GET | `/` | WebSocket upgrade, or NIP-11 relay info with `Accept: application/nostr+json`, or the web client when one is configured |
 | GET | `/info` | NIP-11 relay info |
 | GET | `/health`, `/_liveness`, `/_readiness` | Probes |
 | GET | `/.well-known/nostr.json` | NIP-05 |
@@ -332,6 +333,11 @@ Both transports carry byte-identical JSON frames. The protocol engine cannot tel
 | GET/POST | `/git/*` | 🚧 returns 501 |
 
 HTTP endpoints authenticate with NIP-98 (`kind:27235`, signed over method + URL).
+
+Static hosting is **opt-in**: with no web client directory configured the relay serves the API
+alone and `GET /` keeps answering `426 upgrade_required`. When one is configured its files are
+served read-only, by allow-listed extension, and never under `/api/`, so nothing on disk can
+shadow an endpoint. The bind address is not part of this contract; it defaults to loopback.
 
 **B. Hyperswarm** — the relay listens on a HyperDHT keypair **derived from its Nostr secret key**,
 so the relay's Nostr pubkey *is* its dial address:
@@ -650,6 +656,8 @@ interface InferenceProvider {
 ```
 
 - **`MockProvider`** — deterministic, no network, no models. Every test uses it.
+- **`ScriptedProvider`** — deterministic routing over a declared table: classifies urgency,
+  condenses the request, and names the pubkey the reply is addressed at. No model, no network.
 - **`QvacProvider`** — `@qvac/sdk`. `loadModel()` then `completion()` streamed over `run.events`;
   tool calls surface as job events (43001–43006); `cancel()` on abort. **Loaded lazily** behind
   `--qvac` / `HIVE_INFERENCE=qvac`, so neither the relay nor the test suite ever requires the
@@ -671,6 +679,17 @@ connect + NIP-42 → discover channels → subscribe to @mentions
 ```
 
 Backpressure is per channel, so a slow turn in one channel never blocks another.
+
+A reply is addressed at the pubkeys the provider returns, which default to whoever triggered the
+turn but need not be: an agent may address a **third party**, which is what makes agent-to-agent
+delegation ordinary channel traffic rather than a new kind. A provider may also return a delegation
+(published as a 43001 job request to that agent) and a memo (published as a 30174 engram); streamed
+progress chunks are published as 43003.
+
+Every event a turn emits carries a `hop` tag one greater than the highest hop in the batch that
+caused it, and an agent **ignores** a mention whose hop is at or above `maxHops` (default 4),
+emitting `hop-limit` instead. Two agents mentioning each other therefore terminate: the measured
+message count is exactly `maxHops + 1`. Advisory only — see §2.4.
 
 ---
 
@@ -694,10 +713,15 @@ exit:   0=ok  1=user  2=network  3=auth  4=other  5=write conflict
 Groups: `messages` (send, send-diff, edit, delete, get, thread, search, vote) · `channels` (list,
 get, create, update, topic, purpose, join, leave, archive, unarchive, delete, members, add-member,
 remove-member) · `canvas` (get, set) · `reactions` (add, remove, get) · `dms` (list, open,
-add-member) · `users` (get, set-profile, presence, set-presence, set-status) · `feed` (get) ·
+add-member) · `users` (get, set-profile, set-agent-profile, presence, set-presence, set-status) · `feed` (get) ·
 `social` (publish, set-contacts, event, notes, contacts) · `workflows` (list, get, create, update,
 delete, trigger, runs, approve) · `repos` (create, get, list) · `upload` (file) · `mem` (ls, get,
 hash, set, patch, rm) · `audit` (verify) · `relay` (info, key).
+
+`users set-agent-profile` publishes the **10100 agent profile** (§7.3) — `--persona --owner
+--runtime --capability --model`, `--owner` defaulting to the signing key. It is the only thing that
+marks an identity as a machine; a key with a kind 0 and no 10100 is a human as far as any client
+can tell.
 
 A content argument of `-` reads the body from stdin, so agents can pipe files without escaping.
 

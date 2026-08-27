@@ -1,0 +1,78 @@
+# systemd unit for the standalone relay binary. See docs/DEPLOY.md.
+#
+# systemd is the supervisor the platform already ships: it restarts on failure,
+# owns the state directory, and captures logs. Nothing here is a container,
+# because the standalone binary already carries its own runtime.
+#
+# Install: cp deploy/hive.service /etc/systemd/system/hive.service
+#          $EDITOR /etc/systemd/system/hive.service   # the two CHANGE-ME lines
+#          systemctl daemon-reload && systemctl enable --now hive
+
+[Unit]
+Description=Hive relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# --host 0.0.0.0 accepts connections from the network. This is the one
+# deliberate act that exposes the relay; the binary's own default is 127.0.0.1
+# and stays that way if you delete this flag. On a host with a private
+# interface, prefer that address over 0.0.0.0.
+#
+# --public-url is the origin clients actually reach, i.e. what the TLS proxy in
+# front answers on. NIP-98 signatures are bound to the full request URL, so if
+# this is wrong every authenticated call returns 401 while /health stays green.
+#
+# --no-updates because the binary is the update mechanism here; the OTA updater
+# would fight the deploy.
+# --web-dir is a directory, not something the binary carries. Bare links any
+# .js asset as a module at startup, so bundling the browser's app.js makes the
+# relay die on its '@noble/curves/…' import before it ever listens; @noble also
+# has to reach the browser as real files. Both ship in this directory.
+# Omit the flag and the relay serves the API only.
+ExecStart=/opt/hive/hive relay \
+    --host 0.0.0.0 \
+    --port 3000 \
+    --public-url https://CHANGE-ME.example.com \
+    --web-dir /opt/hive/web \
+    --storage /var/lib/hive \
+    --no-updates
+
+# DO NOT set HIVE_REQUIRE_RELAY_MEMBERSHIP=true or HIVE_PUBKEY_ALLOWLIST=true
+# yet. Both gates work (hive-auth/index.js:23-31) but nothing writes a row into
+# relay_members or pubkey_allowlist: store.addRelayMember has no caller outside
+# the store, and SPEC.md's HIVE_RELAY_OWNER_PUBKEY bootstrap is not implemented.
+# Turning either on locks every key out permanently, including yours.
+#
+# Until a bootstrap exists, any valid signature can write here. Keep the
+# deployment behind an authenticated edge; see docs/DEPLOY.md.
+
+Restart=always
+RestartSec=2
+
+# systemd creates and owns /var/lib/hive, which is also what makes DynamicUser
+# workable: the uid changes between boots, the directory's ownership follows.
+# relay.key lives here and is the relay's dial address — losing it breaks every
+# peer's hyper:// link, so this directory is the thing to back up.
+DynamicUser=yes
+StateDirectory=hive
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+# The standalone binary unpacks ~33 MB of modules into /tmp on every start.
+# PrivateTmp keeps that out of the host's /tmp at the cost of re-extracting on
+# each restart; drop it if restart latency matters more than the isolation.
+PrivateTmp=yes
+PrivateDevices=yes
+# AF_NETLINK is not optional when the swarm is on: hyperDHT enumerates local
+# interfaces through a netlink socket, and without it the worker dies during
+# startup — after "BOUND TO" is printed and before anything listens, with exit
+# status 0. Measured on this exact unit; adding AF_NETLINK was the whole fix.
+# It can be dropped only together with --no-swarm.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+LockPersonality=yes
+MemoryDenyWriteExecute=no
+
+[Install]
+WantedBy=multi-user.target
