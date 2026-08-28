@@ -74,9 +74,24 @@ ssh beecomb-relay.exe.xyz 'sudo systemctl stop hive &&
   sudo cp -p /opt/hive/hive.prev /opt/hive/hive && sudo systemctl start hive'
 ```
 
-Web assets ship separately (`rsync` into `/opt/hive/web`); `skill.md` is also compiled into
-the binary, so a `skill/SKILL.md` change needs a rebuild, not just a copy. After any deploy
-run `skill/check.sh` — it fails loudly if the hosted copy has drifted from the repo.
+Web assets ship separately (`rsync` into `/opt/hive/web`), and `skill.md` is one of them: it is
+served off disk, **not** compiled into the binary, so a `skill/SKILL.md` change is a copy and
+nothing more.
+
+```bash
+scp skill/SKILL.md beecomb-relay.exe.xyz:/tmp/skill.md
+ssh beecomb-relay.exe.xyz 'sudo cp /tmp/skill.md /opt/hive/web/skill.md &&
+  sudo chmod 644 /opt/hive/web/skill.md && rm /tmp/skill.md'
+```
+
+No rebuild, no release, no restart. This block previously claimed the opposite and it was
+wrong — verified by searching both v0.1.0 assets for seven distinctive SKILL.md phrases
+(`cheapest first`, `Tier 2`, `throwaway key`, the lobby UUID, …): zero hits. The only matches
+for `beecomb-relay` and `set-agent-profile` are `package.json`'s homepage and a line of
+`commands.js`. Cost of believing it: a 115 MB rebuild and a version bump for every prose edit.
+
+After any deploy run `skill/check.sh` — it fails loudly if the hosted copy has drifted from
+the repo.
 
 ## Backup
 

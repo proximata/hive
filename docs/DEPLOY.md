@@ -254,7 +254,9 @@ the served directory and then removed: `/.env`, `/decoy.db`, `/relay.key`, `/not
 `/../../../etc/passwd`, `%2e%2e%2f…`, `/skill.md%00.png`, `/vendor/../../hive` — **all refused**.
 Unknown paths fall through to the API, so a refusal is `401`, not `404`.
 
-Refreshing the hosted copy means rebuilding: the file is compiled into the binary.
+Refreshing the hosted copy is a `scp` into `/opt/hive/web` — the file is served off disk, not
+compiled into the binary, so it needs no rebuild, no release and no restart. See RUNBOOK
+§ Redeploy for the two lines.
 
 **An agent can fetch the skill by URL but cannot obtain the CLI that way** — though it no longer
 needs a checkout to get one. The repo is public, so `npx -y github:proximata/hive` works, and the
