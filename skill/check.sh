@@ -67,6 +67,62 @@ done
 [ -z "$LEAK" ] && ok "key/.env/.db/traversal probes all refused" \
   || bad "a non-allow-listed path was SERVED" "$LEAK"
 
+# --- the install tiers ----------------------------------------------------
+#
+# The original §0 said "clone the repo and npm install". A real consumer's coding
+# agent asked him for consent to do that until he gave up, and he never reached the
+# relay. So the cheap tiers are now load-bearing, and each one is checked for the way
+# it actually breaks: a dead release URL, a digest that no longer matches, or a
+# regression to the pipe-to-shell antipattern the consumer was right to fear.
+
+# Only runnable lines, i.e. ones that START with curl. The prose deliberately
+# NAMES the antipattern to warn against it, and a check that cannot tell the
+# warning from the thing it warns about is a check nobody will keep.
+case "$(grep -c '^ *curl .*| *\(sh\|bash\)\b' "$SKILL_MD")" in
+  0) ok "no runnable curl|sh anywhere in the skill" ;;
+  *) bad "the skill pipes a download into a shell" "that is the antipattern; show a checksum step instead" ;;
+esac
+
+# Ordering is the fix. If the clone lands before the no-install tiers, the reader
+# meets the interrogation first and the complaint reproduces.
+CLONE_LINE=$(grep -n 'git clone' "$SKILL_MD" | head -1 | cut -d: -f1)
+NPX_LINE=$(grep -n 'npx -y github:proximata/hive' "$SKILL_MD" | head -1 | cut -d: -f1)
+if [ -n "$CLONE_LINE" ] && [ -n "$NPX_LINE" ] && [ "$NPX_LINE" -lt "$CLONE_LINE" ]; then
+  ok "the no-clone tier is documented before the clone"
+else
+  bad "clone comes first again" "npx at line ${NPX_LINE:-none}, clone at ${CLONE_LINE:-none}"
+fi
+
+# Tier 2 is only real while the assets are downloadable AND the digests in the
+# skill still match the ones the release publishes.
+REL=https://github.com/proximata/hive/releases/download/v0.1.0
+SUMS=$(curl -fsSL -m 30 "$REL/SHA256SUMS" 2>/dev/null)
+if [ -z "$SUMS" ]; then
+  bad "release SHA256SUMS is not downloadable" "$REL/SHA256SUMS"
+else
+  MISMATCH=""
+  for asset in hive-linux-x64 hive-darwin-arm64; do
+    WANT=$(printf '%s\n' "$SUMS" | awk -v a="$asset" '$2==a {print $1}')
+    [ -n "$WANT" ] && grep -q "$WANT  *$asset" "$SKILL_MD" || MISMATCH="$MISMATCH $asset"
+    CODE=$(curl -sS -L -m 30 -o /dev/null -w '%{http_code}' -r 0-0 "$REL/$asset")
+    [ "$CODE" = "206" ] || [ "$CODE" = "200" ] || MISMATCH="$MISMATCH $asset->$CODE"
+  done
+  [ -z "$MISMATCH" ] && ok "both release binaries download and match the digests in SKILL.md" \
+    || bad "tier 2 is broken" "$MISMATCH"
+fi
+
+# Tier 1 broke because `bin` pointed at a Bare ESM file with no shebang, so the
+# SHELL ran it. npx installs straight from the default branch, so this is what a
+# stranger gets. Checked by reading the pushed tree, not by a 3-minute cold npx.
+BIN=$(curl -fsSL -m 20 https://raw.githubusercontent.com/proximata/hive/main/package.json 2>/dev/null \
+  | json "json.load(sys.stdin)['bin']['hive']")
+SHEBANG=$(curl -fsSL -m 20 "https://raw.githubusercontent.com/proximata/hive/main/${BIN#./}" 2>/dev/null | head -1)
+if [ "$SHEBANG" = '#!/usr/bin/env node' ]; then
+  ok "npx tier: bin '$BIN' on main is a Node entry point"
+else
+  bad "npx tier would fall back to the shell" "bin='$BIN' first line='$SHEBANG'"
+fi
+
 # A throwaway identity, exactly as the skill tells a newcomer to make one.
 export HIVE_PRIVATE_KEY
 HIVE_PRIVATE_KEY=$(openssl rand -hex 32)

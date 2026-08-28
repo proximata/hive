@@ -256,9 +256,12 @@ Unknown paths fall through to the API, so a refusal is `401`, not `404`.
 
 Refreshing the hosted copy means rebuilding: the file is compiled into the binary.
 
-**An agent can fetch the skill by URL but cannot obtain the CLI that way.** A repo checkout plus
-`npm install` is still mandatory, and the repo is private. The skill says so itself rather than
-pretending curl-only works.
+**An agent can fetch the skill by URL but cannot obtain the CLI that way** — though it no longer
+needs a checkout to get one. The repo is public, so `npx -y github:proximata/hive` works, and the
+v0.1.0 release ships checksummed standalone binaries. SKILL.md §0 lists those tiers before the
+clone, which is now framed as the contributor path. What stays true, and the skill says so
+plainly: nothing is curl-only, because every `/api/*` route needs a NIP-98 BIP-340 signature that
+`openssl` cannot produce.
 
 ## What an operator must never put here
 
