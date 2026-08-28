@@ -10,8 +10,8 @@
   ],
   "dependencies": {
     "b4a": "^1.6.7",
-    "bare-fs": "^4.8.0",
-    "bare-http1": "^4.5.7",
+    "bare-fs": "^4.8.1",
+    "bare-http1": "^4.5.8",
     "bare-https": "^3.0.0",
     "hive-auth": "^0.1.0",
     "hive-core": "^0.1.0",
