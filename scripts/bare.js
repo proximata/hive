@@ -30,21 +30,34 @@ function resolveBare () {
   return null
 }
 
-const binary = resolveBare()
-if (binary === null) {
-  console.error('bare-runtime is not installed; run `npm install` first')
-  process.exit(1)
+// Run `args` under Bare, inheriting stdio, and exit this process with the
+// child's status. Exported so the published `bin/hive.js` shim can reuse this
+// resolution instead of duplicating the fan-out workaround above.
+function runBare (args) {
+  const binary = resolveBare()
+  if (binary === null) {
+    console.error('bare-runtime is not installed; run `npm install` first')
+    process.exit(1)
+  }
+
+  const child = spawn(binary, args, { stdio: 'inherit' })
+
+  child.on('error', (err) => {
+    console.error(`could not start ${binary}: ${err.message}`)
+    process.exit(1)
+  })
+
+  // Propagate the child's fate exactly, so a failing test run fails the script.
+  child.on('exit', (code, signal) => {
+    if (signal !== null) process.exit(1)
+    process.exit(code ?? 1)
+  })
+
+  return child
 }
 
-const child = spawn(binary, process.argv.slice(2), { stdio: 'inherit' })
+module.exports = { resolveBare, runBare }
 
-child.on('error', (err) => {
-  console.error(`could not start ${binary}: ${err.message}`)
-  process.exit(1)
-})
-
-// Propagate the child's fate exactly, so a failing test run fails the script.
-child.on('exit', (code, signal) => {
-  if (signal !== null) process.exit(1)
-  process.exit(code ?? 1)
-})
+// `node scripts/bare.js <script> ...` stays the local-development entry point;
+// every npm script and both gates call it that way.
+if (require.main === module) runBare(process.argv.slice(2))

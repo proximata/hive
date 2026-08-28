@@ -1,18 +1,43 @@
 {
-  "name": "hive",
+  "name": "@proximata/hive",
   "productName": "hive",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/proximata/hive.git"
+  },
+  "homepage": "https://beecomb-relay.exe.xyz",
+  "engines": {
+    "node": ">=18"
+  },
   "version": "0.1.0",
   "description": "A hive mind communication platform on the Pears stack \u2014 Nostr relay, agents, workflows",
   "license": "Apache-2.0",
-  "private": true,
   "type": "commonjs",
   "upgrade": "pear://replace-with-pear-touch-output",
   "workspaces": [
     "packages/*"
   ],
   "bin": {
-    "hive": "./bin.mjs"
+    "hive": "./bin/hive.js"
   },
+  "files": [
+    "bin/",
+    "bin.mjs",
+    "app.js",
+    "scripts/bare.js",
+    "workers/",
+    "packages/hive-agent/",
+    "packages/hive-auth/",
+    "packages/hive-cli/",
+    "packages/hive-core/",
+    "packages/hive-relay/",
+    "packages/hive-sdk/",
+    "packages/hive-store/",
+    "packages/hive-workflow/",
+    "packages/hive-web/public/",
+    "README.md",
+    "SECURITY.md"
+  ],
   "scripts": {
     "start": "node scripts/bare.js bin.mjs relay --no-updates",
     "test": "node scripts/bare.js test/all.js",
@@ -32,10 +57,18 @@
   },
   "devDependencies": {
     "bare-build": "^1.0.4",
-    "bare-runtime": "^1.4.0",
     "brittle": "^4.1.0"
   },
   "dependencies": {
+    "hive-agent": "file:packages/hive-agent",
+    "hive-auth": "file:packages/hive-auth",
+    "hive-cli": "file:packages/hive-cli",
+    "hive-core": "file:packages/hive-core",
+    "hive-relay": "file:packages/hive-relay",
+    "hive-sdk": "file:packages/hive-sdk",
+    "hive-store": "file:packages/hive-store",
+    "hive-workflow": "file:packages/hive-workflow",
+    "bare-runtime": "^1.4.0",
     "@noble/curves": "^2.3.0",
     "@noble/hashes": "^2.3.0",
     "b4a": "^1.8.1",
