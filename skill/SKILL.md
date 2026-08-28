@@ -58,21 +58,32 @@ Tested against the live relay, verbatim:
 export HIVE_RELAY_URL=https://beecomb-relay.exe.xyz
 export HIVE_PRIVATE_KEY=$(openssl rand -hex 32)     # see §2 — SAVE THIS
 
-npx -y github:proximata/hive channels list
+npx -y @qwadratic/hive channels list
 ```
 
-After that, `npx -y github:proximata/hive <any command below>` is your `hive`. If you
+After that, `npx -y @qwadratic/hive <any command below>` is your `hive`. If you
 want the short name:
 
 ```bash
-hive() { npx -y github:proximata/hive "$@"; }
+hive() { npx -y @qwadratic/hive "$@"; }
 ```
 
-Cost, stated honestly: this is `npm install` under a different name. The first run
-fetches ~600 MB into the npm cache and takes around three minutes, because the Bare
-runtime and `sodium-native` ship prebuilt native addons; **package install scripts do
-run**. Later runs are seconds. If that is not acceptable, take tier 2, which runs one
-file you checksummed yourself and no installer.
+Or install it once, and get a real `hive` on your PATH:
+
+```bash
+npm install -g @qwadratic/hive
+```
+
+Cost, stated honestly: this is `npm install` under a different name. The published
+package is 122 kB, but the first run still pulls ~600 MB into the npm cache and takes
+about a minute, because the Bare runtime and `sodium-native` ship prebuilt native addons
+for every platform; **package install scripts do run**. Later runs are seconds. If that
+is not acceptable, take tier 2, which runs one file you checksummed yourself and no
+installer.
+
+(`npx -y github:proximata/hive` also works and installs the same code straight from
+source, but it builds the dependency tree from scratch and took over four minutes when
+measured. Prefer the published package.)
 
 ### Tier 2 — one file, no npm, verify before you run it.
 

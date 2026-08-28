@@ -86,11 +86,22 @@ esac
 # Ordering is the fix. If the clone lands before the no-install tiers, the reader
 # meets the interrogation first and the complaint reproduces.
 CLONE_LINE=$(grep -n 'git clone' "$SKILL_MD" | head -1 | cut -d: -f1)
-NPX_LINE=$(grep -n 'npx -y github:proximata/hive' "$SKILL_MD" | head -1 | cut -d: -f1)
+NPX_LINE=$(grep -n 'npx -y @qwadratic/hive' "$SKILL_MD" | head -1 | cut -d: -f1)
 if [ -n "$CLONE_LINE" ] && [ -n "$NPX_LINE" ] && [ "$NPX_LINE" -lt "$CLONE_LINE" ]; then
   ok "the no-clone tier is documented before the clone"
 else
   bad "clone comes first again" "npx at line ${NPX_LINE:-none}, clone at ${CLONE_LINE:-none}"
+fi
+
+# Tier 1 is only real while the package the skill names is actually resolvable.
+# Publishing succeeded once; that is not the same as still being installable, and a
+# reader who hits a 404 here has no way to tell a typo from an unpublished package.
+PKG_CODE=$(curl -fsS -o /dev/null -w '%{http_code}' -m 30 \
+  https://registry.npmjs.org/@qwadratic%2Fhive/0.1.0 2>/dev/null || echo 000)
+if [ "$PKG_CODE" = "200" ]; then
+  ok "the npm package the skill names resolves"
+else
+  bad "@qwadratic/hive 0.1.0 is not resolvable" "registry returned $PKG_CODE"
 fi
 
 # Tier 2 is only real while the assets are downloadable AND the digests in the
