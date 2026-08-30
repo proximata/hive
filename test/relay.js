@@ -4,8 +4,8 @@ const test = require('brittle')
 const core = require('hive-core')
 
 const { openStore } = require('hive-store')
-const { Relay, WebSocketTransport, resolveBind } = require('hive-relay')
-const { buildAuthEvent } = require('hive-auth')
+const { Relay, WebSocketTransport, resolveBind, MAX_FILTERS_PER_REQ } = require('hive-relay')
+const { buildAuthEvent, buildNip98Header } = require('hive-auth')
 
 const { TestClient } = require('./client')
 const { request } = require('./http')
@@ -1054,4 +1054,52 @@ test('a connection that goes away is cleaned up', async (t) => {
 
   t.is(h.relay.connections.size, 0, 'connection deregistered')
   t.is(h.relay.subscriptions.size, 0, 'and its subscriptions with it')
+})
+
+// ------------------------------------------------------------ filter caps --
+
+/** A NIP-98 authenticated REST call against the harness relay. */
+function rest (h, who, path, { method = 'GET', body = null } = {}) {
+  const url = `http://127.0.0.1:${h.port}${path}`
+  return request(url, {
+    method,
+    body,
+    headers: { Authorization: buildNip98Header({ url, method, secretKey: who.secretKey, body }) }
+  })
+}
+
+test('a REQ over the filter cap is refused, not silently truncated', async (t) => {
+  const h = await harness(t)
+  const alice = identity('alice')
+  const client = await member(h, alice)
+
+  const filters = []
+  for (let i = 0; i < MAX_FILTERS_PER_REQ + 1; i++) filters.push({ kinds: [1], limit: 1 })
+
+  const over = await client.subscribe('over', ...filters)
+  t.ok(over.closed !== null && over.closed.includes('too many filters'), 'CLOSED says what to fix')
+  t.is(h.relay.subscriptions.size, 0, 'and nothing was registered')
+
+  // One under the line still works, so the cap is a cap and not an outage.
+  const at = await client.subscribe('at', ...filters.slice(0, MAX_FILTERS_PER_REQ))
+  t.is(at.closed, null, 'exactly the cap is still served')
+
+  // COUNT fans out to the same per-filter SQL, so it carries the same cap.
+  const counted = await client.count('c', ...filters)
+  t.ok(counted.closed !== null && counted.closed.includes('too many filters'), 'COUNT is capped too')
+})
+
+test('POST /query is capped the same way as REQ', async (t) => {
+  const h = await harness(t)
+  const alice = identity('alice')
+
+  const filters = []
+  for (let i = 0; i < MAX_FILTERS_PER_REQ + 1; i++) filters.push({ kinds: [1], limit: 1 })
+
+  const over = await rest(h, alice, '/query', { method: 'POST', body: JSON.stringify(filters) })
+  t.is(over.status, 400, 'the HTTP transport does not route around the cap')
+  t.ok(over.json.message.includes('too many filters'))
+
+  const at = await rest(h, alice, '/query', { method: 'POST', body: JSON.stringify(filters.slice(0, MAX_FILTERS_PER_REQ)) })
+  t.is(at.status, 200, 'exactly the cap is still served')
 })

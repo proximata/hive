@@ -6,6 +6,7 @@ const core = require('hive-core')
 const { LIMITS, normalizeFilter, checkPGatedAuthorization } = core
 const { validateNip98, AuthContext, allScopes } = require('hive-auth')
 const { channelsFromFilters } = require('./subscriptions')
+const { MAX_FILTERS_PER_REQ } = require('./relay')
 const { createStaticServer, nobleDir } = require('./static')
 
 // kind -> human label, derived from the registry rather than restated, exactly
@@ -225,6 +226,14 @@ function createRestRouter (relay, opts = {}) {
     if (req.method === 'POST' && (path === '/query' || path === '/count')) {
       const payload = safeJson(body)
       const filters = Array.isArray(payload) ? payload : [payload]
+      // Same cap as the WebSocket REQ path: one HTTP body must not buy
+      // thousands of table scans either. Refused outright, never truncated —
+      // a client that silently gets 20 of its 4600 filters answered is being
+      // lied to about what it queried.
+      if (filters.length > MAX_FILTERS_PER_REQ) {
+        return json(res, 400, { error: 'invalid', message: `too many filters (max ${MAX_FILTERS_PER_REQ})` })
+      }
+
       const normalized = filters.map(normalizeFilter).filter(Boolean)
       if (normalized.length === 0) return json(res, 400, { error: 'invalid', message: 'no valid filters' })
 

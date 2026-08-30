@@ -1,6 +1,6 @@
 'use strict'
 
-const { Relay, Connection } = require('./lib/relay')
+const { Relay, Connection, MAX_FILTERS_PER_REQ } = require('./lib/relay')
 const { SubscriptionRegistry, channelsFromFilters } = require('./lib/subscriptions')
 const protocol = require('./lib/protocol')
 const handlers = require('./lib/handlers')
@@ -12,6 +12,7 @@ const { resolveBind, isLoopback, DEFAULT_HOST, DEFAULT_PORT } = require('./lib/b
 module.exports = {
   Relay,
   Connection,
+  MAX_FILTERS_PER_REQ,
   SubscriptionRegistry,
   channelsFromFilters,
   protocol,

@@ -32,11 +32,17 @@ const {
   LIMITS
 } = require('hive-core')
 
-const { randomChallenge, verifyAuthEvent, AccessPolicy, AlwaysAllowRateLimiter } = require('hive-auth')
+const { randomChallenge, verifyAuthEvent, AccessPolicy, AlwaysAllowRateLimiter, TIERS } = require('hive-auth')
 
 const { parseClientMessage, encode, ProtocolError } = require('./protocol')
 const { SubscriptionRegistry, channelsFromFilters } = require('./subscriptions')
 const { commandHandlers } = require('./handlers')
+
+// Every filter in a REQ becomes its own SQL statement, so an uncapped REQ is
+// one 64 KB frame buying ~4600 full-table scans on Bare's single loop. The
+// ceiling was already named as TIERS.subscriptions and simply never read; this
+// wires it rather than inventing a second number.
+const MAX_FILTERS_PER_REQ = TIERS.human.subscriptions
 
 let nextConnId = 1
 
@@ -456,6 +462,10 @@ class Relay extends EventEmitter {
       return connection.send(encode.closed(subId, 'auth-required: authenticate before subscribing'))
     }
 
+    if (filters.length > MAX_FILTERS_PER_REQ) {
+      return connection.send(encode.closed(subId, `invalid: too many filters (max ${MAX_FILTERS_PER_REQ})`))
+    }
+
     if (this.subscriptions.count(connection.id) >= LIMITS.MAX_SUBSCRIPTIONS &&
         this.subscriptions.get(connection.id, subId) === null) {
       return connection.send(encode.closed(subId, 'rate-limited: too many subscriptions'))
@@ -495,6 +505,10 @@ class Relay extends EventEmitter {
   _handleCount (connection, subId, filters) {
     if (!this.#requireAuth(connection)) {
       return connection.send(encode.closed(subId, 'auth-required: authenticate before counting'))
+    }
+
+    if (filters.length > MAX_FILTERS_PER_REQ) {
+      return connection.send(encode.closed(subId, `invalid: too many filters (max ${MAX_FILTERS_PER_REQ})`))
     }
 
     if (channelsFromFilters(filters).length === 0) {
@@ -580,4 +594,4 @@ class Relay extends EventEmitter {
   }
 }
 
-module.exports = { Relay, Connection }
+module.exports = { Relay, Connection, MAX_FILTERS_PER_REQ }
