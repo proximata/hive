@@ -59,6 +59,12 @@ class Agent extends EventEmitter {
     this.persona = opts.persona ?? null
     this.attestation = opts.attestation ?? null
 
+    // Free text is the only field `hive agents find --query` can match: the
+    // slug in `persona` is one token nobody searches for. Taken from the
+    // persona when the persona carries one, so a deployed agent is findable
+    // without a second place to configure.
+    this.description = opts.description ?? this.persona?.description ?? null
+
     this.provider = opts.provider ?? (this.persona !== null
       ? providerFromPersona(this.persona, opts)
       : new MockProvider())
@@ -146,6 +152,7 @@ class Agent extends EventEmitter {
     const event = events.agentProfile(this.secretKey, {
       owner: this.owner ?? this.pubkey,
       persona: this.persona?.slug ?? null,
+      description: this.description,
       runtime: this.persona?.runtime ?? 'mock',
       capabilities,
       models: this.persona?.model ? [this.persona.model] : [],

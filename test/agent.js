@@ -278,6 +278,7 @@ test('an agent publishes a capability profile on start', async (t) => {
     secretKey: bot.secretKey,
     owner: owner.pubkey,
     persona: { slug: 'honey', display_name: 'Honey', runtime: 'mock', model: 'mock-1' },
+    description: 'reviews pull requests and triages bugs',
     connection: await h.connect(bot)
   })
   t.teardown(() => agent.stop())
@@ -293,6 +294,25 @@ test('an agent publishes a capability profile on start', async (t) => {
   t.is(profile.runtime, 'mock')
   t.ok(profile.capabilities.includes('text-generation'))
   t.alike(profile.models, ['mock-1'])
+  // Without this, every agent the harness publishes is invisible to
+  // `hive agents find --query` — the discovery verbs read this field.
+  t.is(profile.description, 'reviews pull requests and triages bugs')
+})
+
+test('a persona description reaches the published profile', async (t) => {
+  const h = await harness(t)
+  const bot = identity('bot')
+
+  const agent = new Agent({
+    secretKey: bot.secretKey,
+    persona: { slug: 'scribe', display_name: 'Scribe', runtime: 'mock', description: 'turns meeting audio into notes' },
+    connection: await h.connect(bot)
+  })
+  t.teardown(() => agent.stop())
+  await agent.start()
+
+  const stored = h.store.queryEvents([{ kinds: [core.KIND_AGENT_PROFILE], authors: [bot.pubkey] }])
+  t.is(JSON.parse(stored[0].event.content).description, 'turns meeting audio into notes')
 })
 
 test('an agent answers a mention and records the job lifecycle', async (t) => {
