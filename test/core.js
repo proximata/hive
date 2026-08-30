@@ -230,6 +230,11 @@ test('every persistent p-gated kind is excluded from search', (t) => {
     t.is(core.isSearchable(kind), false, `kind ${kind} must never be indexed`)
   }
   t.is(core.isSearchable(core.KIND_STREAM_MESSAGE), true, 'chat is searchable')
+
+  // `hive agents find --query` matches the 10100 description through the
+  // ordinary content index and adds no index of its own. If this ever flips,
+  // free-text agent discovery silently returns nothing.
+  t.is(core.isSearchable(core.KIND_AGENT_PROFILE), true, 'agent profiles are indexed for free')
 })
 
 test('eventIsShared requires an exact two-element tag', (t) => {

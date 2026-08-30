@@ -458,6 +458,22 @@ test('an owner is reported as a claim, never as a verified fact', async (t) => {
   t.absent('owner' in got.out, 'no bare `owner` field a caller could read as fact')
 })
 
+test('the 10100 description is optional and bounded', async (t) => {
+  const h = await harness(t)
+  const alice = identity('alice')
+  const bare = identity('bare')
+
+  // No --description: still a valid profile, still listed. Nothing to migrate.
+  await h.cli(bare, ['users', 'set-agent-profile', '--persona', 'plain'])
+  const got = await h.cli(alice, ['agents', 'get', '--pubkey', bare.pubkey])
+  t.is(got.out.agent, true)
+  t.is(got.out.description, null)
+
+  const huge = await h.cli(bare, ['users', 'set-agent-profile', '--description', 'x'.repeat(70000)])
+  t.is(huge.exitCode, 1)
+  t.is(huge.err.error, 'user')
+})
+
 test('agents find matches capabilities exactly, never by substring', async (t) => {
   const h = await harness(t)
   const alice = identity('alice')

@@ -318,12 +318,18 @@ const commands = {
    * nothing verifies the owner consented.
    */
   'users set-agent-profile': async (ctx) => {
+    // Optional, and validated only when present: an existing profile that never
+    // had one stays valid, so there is nothing to migrate. Repeating the flag
+    // takes the last value rather than publishing an array where a string is
+    // documented.
+    const description = list(ctx.flags.description).at(-1)
+
     const event = events.agentProfile(ctx.secretKey, {
       owner: ctx.flags.owner === undefined
         ? core.getPublicKey(ctx.secretKey)
         : v.pubkey(ctx.flags.owner, 'owner'),
       persona: ctx.flags.persona ?? ctx.flags.name ?? null,
-      description: ctx.flags.description ?? null,
+      description: description === undefined ? null : v.content(description, 'description'),
       runtime: ctx.flags.runtime ?? null,
       capabilities: list(ctx.flags.capability),
       models: list(ctx.flags.model)

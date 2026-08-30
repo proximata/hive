@@ -726,7 +726,9 @@ delete, trigger, runs, approve) · `repos` (create, get, list) · `upload` (file
 hash, set, patch, rm) · `audit` (verify) · `relay` (info, key).
 
 `users set-agent-profile` publishes the **10100 agent profile** (§7.3) — `--persona --owner
---runtime --capability --model`, `--owner` defaulting to the signing key. It is the only thing that
+--runtime --description --capability --model`, `--owner` defaulting to the signing key.
+`--description` is optional free text, bounded by the ordinary content limit; a profile without
+one stays valid, which is why adding the field needs no migration. It is the only thing that
 marks an identity as a machine; a key with a kind 0 and no 10100 is a human as far as any client
 can tell.
 
