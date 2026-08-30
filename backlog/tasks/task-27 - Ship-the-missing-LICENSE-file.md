@@ -1,9 +1,10 @@
 ---
 id: TASK-27
 title: Ship the missing LICENSE file
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 05:35'
+updated_date: '2026-08-30 05:52'
 labels:
   - docs
 dependencies: []
