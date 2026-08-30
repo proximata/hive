@@ -53,6 +53,11 @@ const MAX_FILTERS_PER_REQ = TIERS.human.subscriptions
 // replication both carry them, and they sort to the bottom anyway.
 const MAX_CREATED_AT_DRIFT_S = 900
 
+// RateLimiter.sweep() existed from the start and had no caller, so the bucket
+// map grew one entry per distinct publishing pubkey and never shrank. Once a
+// minute is far cheaper than the leak and far coarser than the window.
+const RATE_LIMIT_SWEEP_MS = 60000
+
 let nextConnId = 1
 
 /**
@@ -162,6 +167,11 @@ class Relay extends EventEmitter {
     this.workflowEngine = opts.workflowEngine ?? null
 
     this.handlers = new Map(commandHandlers)
+
+    // unref'd on purpose: a housekeeping timer must never be the reason Bare's
+    // loop fails to reach idle, which is what mobile suspension depends on.
+    this.sweepTimer = setInterval(() => this.rateLimiter.sweep(), RATE_LIMIT_SWEEP_MS)
+    this.sweepTimer.unref?.()
   }
 
   // ------------------------------------------------------------ lifecycle --
@@ -187,6 +197,7 @@ class Relay extends EventEmitter {
   }
 
   close () {
+    clearInterval(this.sweepTimer)
     for (const connection of [...this.connections.values()]) connection.close('relay closing')
   }
 

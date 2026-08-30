@@ -1143,6 +1143,33 @@ test('rate limiting refuses excess events', async (t) => {
   t.ok(limited < 70, 'but it is not zero')
 })
 
+test('rate-limit buckets are swept, so they do not leak per pubkey', async (t) => {
+  const { RateLimiter } = require('hive-auth')
+
+  // A hand-driven clock, because the leak is about elapsed time and the test
+  // must not be about elapsed time.
+  let now = 0
+  const limiter = new RateLimiter({ tier: 'human', clock: () => now })
+
+  for (let i = 0; i < 50; i++) limiter.allow(`pubkey-${i}`)
+  t.is(limiter.buckets.size, 50, 'one bucket per publishing pubkey')
+
+  // Not yet refilled: sweeping early must not forget a bucket that still owes
+  // tokens, or the limit is trivially reset by waiting a moment.
+  limiter.allow('pubkey-0', 60)
+  limiter.sweep()
+  t.is(limiter.buckets.size, 50, 'a bucket that has not refilled is kept')
+
+  now += 10 * 60 * 1000
+  limiter.sweep()
+  t.is(limiter.buckets.size, 0, 'once refilled, the entry costs nothing and goes')
+
+  // And the relay actually calls it, on a timer that cannot hold the loop open.
+  const h = await harness(t, { rateLimiter: limiter })
+  t.ok(h.relay.sweepTimer !== undefined && h.relay.sweepTimer !== null, 'the sweep is wired')
+  t.is(h.relay.sweepTimer.hasRef(), false, "and it is unref'd, so Bare can still reach idle")
+})
+
 // -------------------------------------------------------- connection limits --
 
 test('a connection that goes away is cleaned up', async (t) => {
