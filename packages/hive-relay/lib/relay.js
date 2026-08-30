@@ -151,7 +151,9 @@ class Relay extends EventEmitter {
 
     this.store = store
     this.url = opts.url ?? 'ws://localhost:3000'
-    this.name = opts.name ?? 'hive'
+    // The NIP-11 name is the deployment's name, not the protocol's. Hive is the
+    // software; RavenClaw is what this relay calls itself on the wire.
+    this.name = opts.name ?? 'RavenClaw'
     this.description = opts.description ?? 'A hive mind communication platform on the Pears stack'
     this.icon = opts.icon ?? null
 
@@ -604,14 +606,18 @@ class Relay extends EventEmitter {
       pubkey: this.pubkey,
       contact: '',
       supported_nips: [1, 9, 10, 11, 16, 17, 23, 25, 29, 33, 34, 42, 43, 45, 50, 56, 98],
-      software: 'https://github.com/hive/hive',
+      software: 'https://github.com/proximata/hive',
       version: require('../package.json').version,
       icon: this.icon,
       limitation: {
         max_message_length: LIMITS.MAX_FRAME_BYTES,
         max_subscriptions: LIMITS.MAX_SUBSCRIPTIONS,
         max_limit: LIMITS.MAX_HISTORICAL_LIMIT,
-        auth_required: this.requireAuth,
+        // NIP-42 is always spoken, but every key is accepted, so advertising
+        // auth_required told clients to go and be granted a credential that
+        // does not exist. It is true only when a gate an operator turned on
+        // can actually refuse a caller.
+        auth_required: this.policy.requireAllowlist === true || this.policy.requireRelayMembership === true,
         payment_required: false
       }
     }

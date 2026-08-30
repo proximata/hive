@@ -79,7 +79,7 @@ async function main () {
     say('The relay is up and describes itself over NIP-11')
     const { request } = require('../test/http')
     const info = (await request(`${url}/`, { headers: { Accept: 'application/nostr+json' } })).json
-    check('NIP-11 document served', info.name === 'hive', `${info.supported_nips.length} NIPs advertised`)
+    check('NIP-11 document served', info.name === 'RavenClaw', `${info.supported_nips.length} NIPs advertised`)
     check('reachable peer-to-peer', swarm.link.startsWith('hyper://'), swarm.link)
 
     // ------------------------------------------------------------------ 2 --

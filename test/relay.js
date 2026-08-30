@@ -305,12 +305,20 @@ test('NIP-11 relay info is served over HTTP', async (t) => {
   t.is(response.status, 200)
 
   const info = response.json
-  t.is(info.name, 'hive')
+  t.is(info.name, 'RavenClaw', 'the deployment name, not the protocol term')
   t.is(info.pubkey, h.relay.pubkey)
   t.ok(info.supported_nips.includes(29), 'advertises NIP-29')
   t.ok(info.supported_nips.includes(42), 'advertises NIP-42')
   t.is(info.limitation.max_message_length, core.LIMITS.MAX_FRAME_BYTES)
-  t.is(info.limitation.auth_required, true)
+  // Writes are authenticated but registration is open, so advertising
+  // auth_required told clients to go and get a credential nobody issues. It
+  // becomes true only when an operator turns on a gate that can refuse.
+  t.is(info.limitation.auth_required, false)
+  t.is(info.software, 'https://github.com/proximata/hive', 'a repository that exists')
+
+  h.relay.policy.requireRelayMembership = true
+  const gated = (await request(`http://127.0.0.1:${h.port}/info`)).json
+  t.is(gated.limitation.auth_required, true, 'and it tracks the gate that is actually on')
 })
 
 test('health and readiness probes answer', async (t) => {

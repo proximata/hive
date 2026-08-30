@@ -91,7 +91,8 @@ async function main () {
   const relay = new Relay(store, {
     secretKey,
     url: publicUrl ?? `ws://${host}:${port}`,
-    name,
+    // No `name`: that argument is the executable name the updater needs, and
+    // passing it here made the NIP-11 name follow the binary filename.
     rateLimiter: new RateLimiter({ tier: 'human' }),
     requireRelayMembership: env.HIVE_REQUIRE_RELAY_MEMBERSHIP === 'true',
     requireAllowlist: env.HIVE_PUBKEY_ALLOWLIST === 'true'
