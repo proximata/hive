@@ -5,6 +5,7 @@ const core = require('hive-core')
 
 const { openStore } = require('hive-store')
 const { Relay, WebSocketTransport, resolveBind, MAX_FILTERS_PER_REQ } = require('hive-relay')
+const { MAX_PUT_USER_TARGETS } = require('hive-relay').handlers
 const { buildAuthEvent, buildNip98Header } = require('hive-auth')
 
 const { TestClient } = require('./client')
@@ -996,6 +997,39 @@ test('NIP-50 search returns matches and respects channel access', async (t) => {
 
   const denied = await eveClient.subscribe('s2', { kinds: [core.KIND_STREAM_MESSAGE], search: 'pineapple' })
   t.is(denied.events.length, 0, 'search cannot be used to read a channel you are not in')
+})
+
+test('put-user refuses a fan-out bomb and non-hex p tags', async (t) => {
+  const h = await harness(t)
+  const alice = identity('alice')
+  const client = await member(h, alice)
+  const chan = await makeChannel(h, alice, client)
+
+  const before = h.store.listMembers(chan).length
+
+  // One over the line. Each target would cost an addMember, an audit row and
+  // a relay signature.
+  const many = []
+  for (let i = 0; i < MAX_PUT_USER_TARGETS + 1; i++) many.push(['p', identity(`x${i}`).pubkey])
+  const bomb = await client.publish(
+    sign(alice, { kind: core.KIND_NIP29_PUT_USER, tags: [['h', chan], ...many], content: '' })
+  )
+  t.absent(bomb.accepted, 'the fan-out bomb is refused')
+  t.ok(bomb.reason.includes('at most'), `reason says the limit: ${bomb.reason}`)
+
+  const junk = await client.publish(
+    sign(alice, { kind: core.KIND_NIP29_PUT_USER, tags: [['h', chan], ['p', 'notahexkey']], content: '' })
+  )
+  t.absent(junk.accepted, 'a p tag that is not a pubkey is refused')
+  t.ok(junk.reason.includes('hex pubkey'))
+
+  t.is(h.store.listMembers(chan).length, before, 'and neither refusal added a member')
+
+  // Exactly the cap, and an ordinary single add, both still work.
+  const ok = await client.publish(
+    sign(alice, { kind: core.KIND_NIP29_PUT_USER, tags: [['h', chan], ...many.slice(0, MAX_PUT_USER_TARGETS)], content: '' })
+  )
+  t.ok(ok.accepted, 'exactly the cap is still served')
 })
 
 // ------------------------------------------------------------------- audit --

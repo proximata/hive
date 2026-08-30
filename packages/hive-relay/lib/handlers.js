@@ -196,6 +196,16 @@ const createGroup = {
 
 // ---------------------------------------------------------- 9000 put user --
 
+// Every p tag costs an addMember, an audit row and a relay schnorr signature,
+// synchronously, and ~900 of them fit in one 64 KB frame. Rejected over the
+// line rather than truncated: a client told "accepted" while 836 of its 900
+// invitations were dropped has been lied to.
+const MAX_PUT_USER_TARGETS = 64
+
+// A p tag that is not a pubkey is a row in channel_members that no key can
+// ever match, so it can only ever be garbage.
+const PUBKEY_HEX = /^[0-9a-f]{64}$/
+
 const putUser = {
   authorize (relay, event) {
     const { channel, reason } = requireChannel(relay, event)
@@ -203,6 +213,12 @@ const putUser = {
 
     const targets = tagValuesAll(event, 'p')
     if (targets.length === 0) return 'invalid: put-user requires at least one p tag'
+    if (targets.length > MAX_PUT_USER_TARGETS) {
+      return `invalid: at most ${MAX_PUT_USER_TARGETS} p tags per put-user`
+    }
+    for (const target of targets) {
+      if (!PUBKEY_HEX.test(target)) return 'invalid: every p tag must be a 64-character hex pubkey'
+    }
 
     const selfAdd = targets.length === 1 && targets[0] === event.pubkey
 
@@ -650,5 +666,6 @@ module.exports = {
   RejectError,
   uuidv4,
   isAtLeast,
-  roleOf
+  roleOf,
+  MAX_PUT_USER_TARGETS
 }
