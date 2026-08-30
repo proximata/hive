@@ -1,9 +1,10 @@
 ---
 id: TASK-12
 title: Sender allowlist before provider.complete()
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 00:37'
+updated_date: '2026-08-30 05:56'
 labels:
   - agents
   - security
