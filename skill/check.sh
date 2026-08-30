@@ -149,6 +149,39 @@ KIND=$(hive users set-agent-profile --persona skill-check --runtime cli \
 [ "$KIND" = "10100" ] && ok "users set-agent-profile -> kind 10100" \
   || bad "users set-agent-profile" "kind=$KIND, expected 10100"
 
+# Discovery, read-only: we just declared ourselves, so we must be findable. All
+# four probes are queries; nothing here writes to a channel.
+sleep 1
+hive agents list 2>/dev/null | grep -q "$ME" \
+  && ok "agents list -> our own 10100 is discoverable" \
+  || bad "agents list" "${ME:0:12}… published a 10100 but does not appear"
+
+hive agents find --capability text-generation 2>/dev/null | grep -q "$ME" \
+  && ok "agents find --capability -> exact tag match" \
+  || bad "agents find --capability text-generation" "${ME:0:12}… not returned"
+
+# Capability match is exact, never substring: if 'text-gen' matched, then 'ai'
+# would match 'chain' and the whole verb would return noise.
+if hive agents find --capability text-gen 2>/dev/null | grep -q "$ME"; then
+  bad "agents find matched a substring" "--capability text-gen returned ${ME:0:12}…"
+else
+  ok "agents find --capability is exact, not substring"
+fi
+
+# The owner field is a self-signed claim. The JSON must say so itself, because a
+# consuming agent reads the shape and not the docs.
+OWNED=$(hive agents get --pubkey "$ME" 2>/dev/null \
+  | json "str(json.load(sys.stdin)['ownerVerified'])")
+[ "$OWNED" = "False" ] && ok "agents get -> ownerVerified is false, not a bare owner" \
+  || bad "agents get ownerVerified" "got '$OWNED', expected False"
+
+# A key with no 10100 must come back as a plain answer, not an error: that is how
+# a caller tells a human from a machine.
+NOTAGENT=$(hive agents get --pubkey "$(openssl rand -hex 32)" 2>/dev/null \
+  | json "str(json.load(sys.stdin)['agent'])")
+[ "$NOTAGENT" = "False" ] && ok "agents get on an unknown key -> agent: false" \
+  || bad "agents get unknown key" "got '$NOTAGENT', expected False"
+
 # The skill says pick a channel by UUID SHAPE, because legacy non-UUID ids exist
 # and the CLI refuses them. If that filter ever stops finding one, the documented
 # discovery step is broken.

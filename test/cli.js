@@ -405,6 +405,127 @@ test('users get batches lookups', async (t) => {
   t.is(own.out[0].pubkey, alice.pubkey)
 })
 
+// ----------------------------------------------------------------- agents --
+
+/** Seed two agents and a plain human, which is the only interesting case. */
+async function seedAgents (h) {
+  const bot = identity('bot')
+  const scribe = identity('scribe')
+  const human = identity('human')
+
+  await h.cli(human, ['users', 'set-profile', '--display-name', 'Human'])
+  await h.cli(bot, ['users', 'set-agent-profile',
+    '--persona', 'honey', '--runtime', 'claude-code',
+    '--description', 'reviews pull requests and triages bugs',
+    '--capability', 'code', '--capability', 'text-generation',
+    '--owner', human.pubkey])
+  await h.cli(scribe, ['users', 'set-agent-profile',
+    '--persona', 'scribe', '--runtime', 'qvac',
+    '--description', 'turns meeting audio into notes',
+    '--capability', 'transcription'])
+
+  return { bot, scribe, human }
+}
+
+test('agents list returns declared machines only', async (t) => {
+  const h = await harness(t)
+  const alice = identity('alice')
+  const { bot, scribe, human } = await seedAgents(h)
+
+  const all = await h.cli(alice, ['agents', 'list'])
+  t.is(all.exitCode, 0)
+  t.is(all.out.length, 2)
+  t.absent(all.out.some((a) => a.pubkey === human.pubkey), 'a kind-0 profile is not an agent')
+
+  const honey = all.out.find((a) => a.pubkey === bot.pubkey)
+  t.is(honey.persona, 'honey')
+  t.is(honey.runtime, 'claude-code')
+  t.is(honey.description, 'reviews pull requests and triages bugs')
+  t.alike(honey.capabilities, ['code', 'text-generation'])
+
+  const self = all.out.find((a) => a.pubkey === scribe.pubkey)
+  t.is(self.ownerClaimed, null, 'a self-owned profile reports no owner')
+})
+
+test('an owner is reported as a claim, never as a verified fact', async (t) => {
+  const h = await harness(t)
+  const alice = identity('alice')
+  const { bot, human } = await seedAgents(h)
+
+  const got = await h.cli(alice, ['agents', 'get', '--pubkey', bot.pubkey])
+  t.is(got.out.ownerClaimed, human.pubkey)
+  t.is(got.out.ownerVerified, false, 'nothing verifies the owner consented')
+  t.absent('owner' in got.out, 'no bare `owner` field a caller could read as fact')
+})
+
+test('agents find matches capabilities exactly, never by substring', async (t) => {
+  const h = await harness(t)
+  const alice = identity('alice')
+  const { bot, scribe } = await seedAgents(h)
+
+  const code = await h.cli(alice, ['agents', 'find', '--capability', 'code'])
+  t.is(code.out.length, 1)
+  t.is(code.out[0].pubkey, bot.pubkey)
+
+  // 'cod' is a substring of 'code' and must match nothing; 'CODE' must match,
+  // because the comparison is case-folded and not case-sensitive.
+  const substring = await h.cli(alice, ['agents', 'find', '--capability', 'cod'])
+  t.is(substring.out.length, 0)
+  const folded = await h.cli(alice, ['agents', 'find', '--capability', 'CODE'])
+  t.is(folded.out.length, 1)
+
+  // Several capabilities are an AND, not an OR.
+  const both = await h.cli(alice, ['agents', 'find',
+    '--capability', 'code', '--capability', 'transcription'])
+  t.is(both.out.length, 0)
+
+  const scribed = await h.cli(alice, ['agents', 'find', '--capability', 'transcription'])
+  t.is(scribed.out[0].pubkey, scribe.pubkey)
+
+  const empty = await h.cli(alice, ['agents', 'find'])
+  t.is(empty.exitCode, 1)
+  t.is(empty.err.error, 'user')
+})
+
+test('agents find free-text is token-AND over the search index', async (t) => {
+  const h = await harness(t)
+  const alice = identity('alice')
+  const { scribe } = await seedAgents(h)
+
+  const hit = await h.cli(alice, ['agents', 'find', '--query', 'meeting audio'])
+  t.is(hit.out.length, 1)
+  t.is(hit.out[0].pubkey, scribe.pubkey)
+
+  // Every token must be present: one unmatched word drops the hit entirely,
+  // which is what makes this AND rather than OR.
+  const miss = await h.cli(alice, ['agents', 'find', '--query', 'meeting unicorn'])
+  t.is(miss.out.length, 0)
+})
+
+test('agents get says plainly when a pubkey is not an agent', async (t) => {
+  const h = await harness(t)
+  const alice = identity('alice')
+  const { human } = await seedAgents(h)
+
+  const person = await h.cli(alice, ['agents', 'get', '--pubkey', human.pubkey])
+  t.is(person.exitCode, 0)
+  t.is(person.out.agent, false)
+  t.is(person.out.displayName, 'Human')
+  t.ok(person.out.reason.includes('10100'))
+
+  // A pubkey the relay has never seen answers with a bare {pubkey}; the verb
+  // must null-guard it rather than crash or invent a name.
+  const stranger = identity('stranger')
+  const unknown = await h.cli(alice, ['agents', 'get', '--pubkey', stranger.pubkey])
+  t.is(unknown.exitCode, 0)
+  t.is(unknown.out.agent, false)
+  t.is(unknown.out.displayName, null)
+
+  const bad = await h.cli(alice, ['agents', 'get', '--pubkey', 'not-a-key'])
+  t.is(bad.exitCode, 1)
+  t.is(bad.err.error, 'user')
+})
+
 // ------------------------------------------------------------------- feed --
 
 test('the feed shows mentions', async (t) => {

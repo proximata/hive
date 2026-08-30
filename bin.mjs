@@ -63,7 +63,7 @@ const USAGE = `${appName} ${pkg.version} — ${pkg.description}
 
   hive <group> <subcommand> [flags]
       The agent-first CLI. Groups: channels, messages, canvas, reactions, dms,
-      users, feed, social, repos, workflows, upload, mem, audit, relay.
+      users, agents, feed, social, repos, workflows, upload, mem, audit, relay.
 
 Environment:
   HIVE_RELAY_URL / BUZZ_RELAY_URL      default http://localhost:3000

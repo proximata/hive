@@ -323,6 +323,7 @@ const commands = {
         ? core.getPublicKey(ctx.secretKey)
         : v.pubkey(ctx.flags.owner, 'owner'),
       persona: ctx.flags.persona ?? ctx.flags.name ?? null,
+      description: ctx.flags.description ?? null,
       runtime: ctx.flags.runtime ?? null,
       capabilities: list(ctx.flags.capability),
       models: list(ctx.flags.model)
@@ -349,6 +350,77 @@ const commands = {
     })
     await ctx.client.publish(event)
     return event
+  },
+
+  // --------------------------------------------------------------- agents --
+
+  /**
+   * Who on this relay is a machine, and what does it say it can do.
+   *
+   * `users get` reads the kind-0 projection and so cannot tell a machine from a
+   * human; kind 10100 is the only signal, and it is already stored, replaceable
+   * and full-text indexed (hive-core/lib/kinds.js:293 `isSearchable`, and
+   * UNSEARCHABLE_KINDS at kinds.js:211-221 omits 10100). These verbs are
+   * therefore a read path over `client.query`, not a new index.
+   */
+  'agents list': async (ctx) => {
+    const events = await ctx.client.query({
+      kinds: [core.KIND_AGENT_PROFILE],
+      limit: v.integer(ctx.flags.limit, 'limit', { min: 1, max: 500 }) ?? 200
+    })
+    return byCapability(events.map(agentRecord), ctx)
+  },
+
+  /**
+   * `--capability` is an EXACT tag match and `--query` is token-AND over the
+   * relay's existing search index — never substring. Substring would make `ai`
+   * match `chain`, and a discovery verb that returns noise is worse than none.
+   */
+  'agents find': async (ctx) => {
+    const query = ctx.flags.query ?? ctx.positional[0]
+    const capabilities = list(ctx.flags.capability)
+    if (query === undefined && capabilities.length === 0) {
+      throw new CliError('user', '--query or --capability is required')
+    }
+
+    const filter = {
+      kinds: [core.KIND_AGENT_PROFILE],
+      limit: v.integer(ctx.flags.limit, 'limit', { min: 1, max: 500 }) ?? 200
+    }
+    if (query !== undefined) filter.search = v.required(query, 'query')
+
+    return byCapability((await ctx.client.query(filter)).map(agentRecord), ctx)
+  },
+
+  /**
+   * A pubkey with no 10100 is a human or an agent that never declared itself,
+   * and the caller has to be able to tell those apart from an error. Say
+   * `agent: false` explicitly: `/api/users` answers with a bare `{pubkey}` for
+   * anyone it has never seen, so every kind-0 field is null-guarded too.
+   */
+  'agents get': async (ctx) => {
+    const pubkey = v.pubkey(ctx.positional[0] ?? ctx.flags.pubkey)
+
+    const events = await ctx.client.query({
+      kinds: [core.KIND_AGENT_PROFILE],
+      authors: [pubkey],
+      limit: 1
+    })
+
+    const users = await ctx.client.get('/api/users', { pubkey: [pubkey] })
+    const user = Array.isArray(users) ? users.find((u) => u?.pubkey === pubkey) ?? null : null
+    const displayName = user?.displayName ?? null
+
+    if (events.length === 0) {
+      return {
+        pubkey,
+        agent: false,
+        displayName,
+        reason: 'no kind 10100 profile: this pubkey is a human, or an agent that never declared itself'
+      }
+    }
+
+    return { ...agentRecord(events[0]), agent: true, displayName }
   },
 
   // ----------------------------------------------------------------- feed --
@@ -573,6 +645,61 @@ const commands = {
     })
     return result.entries
   }
+}
+
+/**
+ * Normalize a kind-10100 event into the record the agent verbs print.
+ *
+ * `owner` is a SELF-SIGNED claim: the agent names a human, and nothing checks
+ * the human agreed — hive-core/lib/attestation.js `verifyAttestation` has no
+ * non-test caller. So the field is named `ownerClaimed` and travels next to
+ * `ownerVerified: false`, in the JSON shape itself, because a consuming agent
+ * reads the shape and not this comment.
+ */
+function agentRecord (event) {
+  let content = {}
+  try {
+    const parsed = JSON.parse(event.content)
+    if (parsed !== null && typeof parsed === 'object') content = parsed
+  } catch {
+    // A profile with unparseable content is still a declaration of machine-hood.
+  }
+
+  const owner = typeof content.owner === 'string' ? content.owner : null
+
+  return {
+    pubkey: event.pubkey,
+    persona: strOrNull(content.persona),
+    description: strOrNull(content.description),
+    runtime: strOrNull(content.runtime),
+    capabilities: strings(content.capabilities),
+    models: strings(content.models),
+    // Self-owned is the same as unowned: it is what the harness writes when no
+    // owner was configured, and reporting it would invent a relationship.
+    ownerClaimed: owner === event.pubkey ? null : owner,
+    ownerVerified: false,
+    eventId: event.id,
+    updatedAt: event.created_at
+  }
+}
+
+function strOrNull (value) {
+  return typeof value === 'string' ? value : null
+}
+
+function strings (value) {
+  return Array.isArray(value) ? value.filter((s) => typeof s === 'string') : []
+}
+
+/** Exact, case-folded tag match. Every requested capability must be present. */
+function byCapability (records, ctx) {
+  const wanted = list(ctx.flags.capability).map((c) => String(c).toLowerCase())
+  if (wanted.length === 0) return records
+
+  return records.filter((r) => {
+    const have = r.capabilities.map((c) => c.toLowerCase())
+    return wanted.every((w) => have.includes(w))
+  })
 }
 
 /**

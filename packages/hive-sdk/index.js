@@ -158,10 +158,14 @@ const events = {
 
   // --------------------------------------------------------------- agents --
 
-  agentProfile (secretKey, { owner, persona = null, runtime = null, capabilities = [], models = [], delegation = null, sdkVersion = null }) {
+  agentProfile (secretKey, { owner, persona = null, description = null, runtime = null, capabilities = [], models = [], delegation = null, sdkVersion = null }) {
     return build(secretKey, core.KIND_AGENT_PROFILE, [['p', owner]], JSON.stringify({
       owner,
       persona,
+      // One sentence of self-written free text. It is content, not a tag, so
+      // the existing tokenizer indexes it for free and `hive agents find
+      // --query` can match on it; `persona` alone is a slug and matches nothing.
+      description,
       runtime,
       sdk_version: sdkVersion,
       capabilities,
