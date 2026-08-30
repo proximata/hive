@@ -4,7 +4,7 @@ const test = require('brittle')
 const core = require('hive-core')
 
 const { openStore } = require('hive-store')
-const { Relay, WebSocketTransport, resolveBind, MAX_FILTERS_PER_REQ } = require('hive-relay')
+const { Relay, WebSocketTransport, resolveBind, MAX_FILTERS_PER_REQ, MAX_CREATED_AT_DRIFT_S } = require('hive-relay')
 const { MAX_PUT_USER_TARGETS } = require('hive-relay').handlers
 const { buildAuthEvent, buildNip98Header } = require('hive-auth')
 
@@ -1030,6 +1030,42 @@ test('put-user refuses a fan-out bomb and non-hex p tags', async (t) => {
     sign(alice, { kind: core.KIND_NIP29_PUT_USER, tags: [['h', chan], ...many.slice(0, MAX_PUT_USER_TARGETS)], content: '' })
   )
   t.ok(ok.accepted, 'exactly the cap is still served')
+})
+
+test('a far-future created_at cannot pin itself to the top of every feed', async (t) => {
+  const h = await harness(t)
+  const alice = identity('alice')
+  const client = await member(h, alice)
+  const chan = await makeChannel(h, alice, client)
+
+  const now = Math.floor(Date.now() / 1000)
+
+  const year30000 = await client.publish(
+    sign(alice, { kind: core.KIND_STREAM_MESSAGE, created_at: 32503680000, tags: [['h', chan]], content: 'sticky' })
+  )
+  t.absent(year30000.accepted, 'year 30000 is refused')
+  t.ok(year30000.reason.includes('created_at'), `reason names the field: ${year30000.reason}`)
+
+  // One second past the line is still refused; well inside it is fine, because
+  // a slightly fast clock is not an attack.
+  const justOver = await client.publish(
+    sign(alice, { kind: core.KIND_STREAM_MESSAGE, created_at: now + MAX_CREATED_AT_DRIFT_S + 60, tags: [['h', chan]], content: 'over' })
+  )
+  t.absent(justOver.accepted, 'past the drift allowance is refused')
+
+  const skewed = await client.publish(
+    sign(alice, { kind: core.KIND_STREAM_MESSAGE, created_at: now + 60, tags: [['h', chan]], content: 'fast clock' })
+  )
+  t.ok(skewed.accepted, 'a minute of clock skew is not an attack')
+
+  // The past is untouched: imports and replication carry old timestamps.
+  const old = await client.publish(
+    sign(alice, { kind: core.KIND_STREAM_MESSAGE, created_at: 1000, tags: [['h', chan]], content: 'ancient' })
+  )
+  t.ok(old.accepted, 'old events are still accepted')
+
+  const feed = await client.subscribe('s', { kinds: [core.KIND_STREAM_MESSAGE], '#h': [chan] })
+  t.absent(feed.events.some((e) => e.content === 'sticky'), 'nothing sticky reached the store')
 })
 
 // ------------------------------------------------------------------- audit --

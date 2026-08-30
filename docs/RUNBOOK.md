@@ -52,6 +52,24 @@ hash. Boot prints six lines and then the relay is silent; a growing log means re
 
 Logs are not a source of truth for who did what — use `GET /api/audit` (authenticated).
 
+`GET /api/audit` returns `verification: null` unless the caller signs with the relay's own
+key — chain verification is a full scan plus a hash per row, so it is operator-only.
+
+## Far-future events left over from before the created_at bound
+
+The relay now refuses `created_at` more than 900 s ahead, but a store seeded before that
+may already hold one, and every query orders `created_at DESC`, so it sits at the top of
+every feed forever. Find them, then delete:
+
+```sh
+sqlite3 /var/lib/hive/hive.db \
+  "SELECT id, kind, pubkey, created_at FROM events WHERE created_at > strftime('%s','now') + 900;"
+sqlite3 /var/lib/hive/hive.db \
+  "DELETE FROM events WHERE created_at > strftime('%s','now') + 900;"
+```
+
+Stop the relay first: the store is not written concurrently by design.
+
 ## Restart · redeploy · roll back
 
 ```sh

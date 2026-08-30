@@ -44,6 +44,15 @@ const { commandHandlers } = require('./handlers')
 // wires it rather than inventing a second number.
 const MAX_FILTERS_PER_REQ = TIERS.human.subscriptions
 
+// Every query orders created_at DESC, so an event dated year 30000 pins itself
+// to the top of every result set forever - sticky spam for the price of one
+// publish. 15 minutes is loose enough for a badly set clock and tight enough
+// that the top of a feed stays the present.
+//
+// Only the future is bounded. Old timestamps are legitimate: imports and
+// replication both carry them, and they sort to the bottom anyway.
+const MAX_CREATED_AT_DRIFT_S = 900
+
 let nextConnId = 1
 
 /**
@@ -357,6 +366,10 @@ class Relay extends EventEmitter {
   _validateIngest (event) {
     const reject = (reason) => ({ channelId: null, reason })
 
+    if (event.created_at > Math.floor(Date.now() / 1000) + MAX_CREATED_AT_DRIFT_S) {
+      return reject(`invalid: created_at is more than ${MAX_CREATED_AT_DRIFT_S}s in the future`)
+    }
+
     // Relay-signed kinds may only come from the relay's own key. Without this
     // a client could forge membership notifications or group metadata.
     if (isRelaySignedKind(event.kind) && event.pubkey !== this.pubkey) {
@@ -594,4 +607,4 @@ class Relay extends EventEmitter {
   }
 }
 
-module.exports = { Relay, Connection, MAX_FILTERS_PER_REQ }
+module.exports = { Relay, Connection, MAX_FILTERS_PER_REQ, MAX_CREATED_AT_DRIFT_S }
