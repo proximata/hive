@@ -69,6 +69,17 @@ class Agent extends EventEmitter {
       bootstrap: opts.bootstrap ?? null
     })
 
+    // Who may spend the owner's key. `null` means anyone — the default, because
+    // the relay's channels are the access control that already exists and an
+    // agent invited to a channel is meant to answer the people in it. An
+    // allowlist is opt-in, configured on the author-only persona (kind 30175)
+    // so the roster is not world-readable, and the owner is always in it:
+    // locking yourself out of your own agent is never the intent.
+    const allow = opts.allow ?? this.persona?.allow ?? null
+    this.allow = Array.isArray(allow) && allow.length > 0
+      ? new Set([...allow, ...(this.owner === null ? [] : [this.owner])])
+      : null
+
     this.historyLimit = opts.historyLimit ?? 12
     this.maxHops = opts.maxHops ?? DEFAULT_MAX_HOPS
     this.queues = new Map() // channelId -> { pending: [], running: boolean }
@@ -175,6 +186,24 @@ class Agent extends EventEmitter {
     // agent can read but should not react to — an agent that replies to every
     // message is a chat bot, not a teammate.
     if (!core.referencedPubkeys(event).includes(this.pubkey)) return
+
+    // Set membership, before anything is queued and long before a token is
+    // spent. A refusal is recorded as an ordinary 43006 job error rather than
+    // dropped, so an operator reading the log can tell "nobody asked" from
+    // "someone asked and was turned away".
+    //
+    // ponytail: an unknown sender therefore costs one signed publish, which is
+    // an amplification lever a spammer can pull. Accepted because the relay's
+    // per-pubkey token bucket is the backstop for volume and silent drops are
+    // worse than cheap ones. Upgrade path: only record the first refusal per
+    // sender per window.
+    if (this.allow !== null && !this.allow.has(event.pubkey)) {
+      this.emit('refused', event, channelId)
+      this._publishJobEvent(core.KIND_JOB_ERROR, {
+        channelId, jobId: event.id, requester: event.pubkey, content: 'sender not allowed'
+      }).catch((err) => this._raise(err))
+      return
+    }
 
     // The loop guard. See HOP_TAG above: this is the only thing that stops two
     // agents that mention each other, and it must come before the queue, not

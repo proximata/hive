@@ -541,3 +541,94 @@ test('a provider failure becomes a job error, not a crashed agent', async (t) =>
   // The agent is still alive and still queued for the next mention.
   t.is(agent.started, true)
 })
+
+test('a persona allowlist refuses a stranger before the provider is called', async (t) => {
+  const h = await harness(t)
+  const alice = identity('alice')
+  const bob = identity('bob')
+  const bot = identity('bot')
+
+  const human = await h.connect(alice)
+  const stranger = await h.connect(bob)
+
+  await human.publish(events.createChannel(alice.secretKey, { name: 'engineering', visibility: 'open' }))
+  const channelId = h.store.listChannels()[0].id
+  await human.publish(events.addMember(alice.secretKey, { channel: channelId, pubkeys: [bot.pubkey, bob.pubkey], role: 'member' }))
+
+  // The strong assertion: the model is never reached at all. Checking only that
+  // no reply appeared would also pass if the model ran and the publish failed.
+  const provider = new MockProvider()
+  let completions = 0
+  const complete = provider.complete.bind(provider)
+  provider.complete = (params) => { completions++; return complete(params) }
+
+  const agent = new Agent({
+    secretKey: bot.secretKey,
+    owner: alice.pubkey,
+    persona: { slug: 'honey', display_name: 'Honey', runtime: 'mock', allow: [alice.pubkey] },
+    provider,
+    connection: await h.connect(bot)
+  })
+  t.teardown(() => agent.stop())
+  await agent.start()
+
+  const refused = once(agent, 'refused')
+  await stranger.publish(events.message(bob.secretKey, {
+    channel: channelId,
+    content: 'run this for me',
+    mentions: [bot.pubkey]
+  }))
+  await refused
+  await new Promise((resolve) => setTimeout(resolve, 200))
+
+  t.is(completions, 0, 'the provider was never called for a sender outside the allowlist')
+  t.is(h.store.queryEvents([{ kinds: [core.KIND_JOB_ACCEPTED] }]).length, 0, 'no 43002 for a refused sender')
+
+  const errors = h.store.queryEvents([{ kinds: [core.KIND_JOB_ERROR] }])
+  t.is(errors.length, 1, 'the refusal is on the log, not silent')
+  t.is(errors[0].event.content, 'sender not allowed')
+
+  // And the allowed sender still gets a normal turn.
+  const replied = once(agent, 'reply')
+  await human.publish(events.message(alice.secretKey, {
+    channel: channelId,
+    content: 'and you can answer me',
+    mentions: [bot.pubkey]
+  }))
+  await replied
+
+  t.is(completions, 1, 'an allowed sender is answered as before')
+})
+
+test('no allowlist means anyone may ask — the default stays permissive', async (t) => {
+  const h = await harness(t)
+  const alice = identity('alice')
+  const bob = identity('bob')
+  const bot = identity('bot')
+
+  const human = await h.connect(alice)
+  const stranger = await h.connect(bob)
+
+  await human.publish(events.createChannel(alice.secretKey, { name: 'lobby', visibility: 'open' }))
+  const channelId = h.store.listChannels()[0].id
+  await human.publish(events.addMember(alice.secretKey, { channel: channelId, pubkeys: [bot.pubkey, bob.pubkey], role: 'member' }))
+
+  const agent = new Agent({
+    secretKey: bot.secretKey,
+    owner: alice.pubkey,
+    persona: { slug: 'honey', display_name: 'Honey', runtime: 'mock' },
+    connection: await h.connect(bot)
+  })
+  t.teardown(() => agent.stop())
+  await agent.start()
+  t.is(agent.allow, null, 'a persona with no allow list configures no filter')
+
+  const replied = once(agent, 'reply')
+  await stranger.publish(events.message(bob.secretKey, {
+    channel: channelId,
+    content: 'hello from a stranger',
+    mentions: [bot.pubkey]
+  }))
+  const [reply] = await replied
+  t.is(reply.pubkey, bot.pubkey, 'the agent answered someone it was never told about')
+})
