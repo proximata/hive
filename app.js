@@ -27,6 +27,9 @@ class App extends ReadyResource {
     this.publicUrl = opts.publicUrl ?? null
     this.webDir = opts.webDir ?? null
     this.swarm = opts.swarm !== false
+    // undefined, not [], means "hyperdht's public bootstrap nodes" — see
+    // resolveBootstrap in packages/hive-relay/lib/bind.js.
+    this.bootstrap = opts.bootstrap ?? undefined
 
     this.url = null
     this.link = null
@@ -52,7 +55,8 @@ class App extends ReadyResource {
       // every later one.
       this.host,
       this.publicUrl ?? '',
-      this.webDir ?? ''
+      this.webDir ?? '',
+      this.bootstrap === undefined ? '' : this.bootstrap.join(',')
     ])
 
     this.pipe = new FramedStream(this.IPC)

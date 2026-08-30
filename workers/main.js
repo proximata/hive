@@ -14,7 +14,7 @@ const env = require('bare-env')
 const FramedStream = require('framed-stream')
 
 const { openStore } = require('hive-store')
-const { Relay, WebSocketTransport, SwarmTransport, MediaStore } = require('hive-relay')
+const { Relay, WebSocketTransport, SwarmTransport, MediaStore, resolveBootstrap } = require('hive-relay')
 const { WorkflowEngine } = require('hive-workflow')
 const { RateLimiter } = require('hive-auth')
 const core = require('hive-core')
@@ -32,7 +32,8 @@ const [
   swarmArg,
   hostArg,
   publicUrlArg,
-  webDirArg
+  webDirArg,
+  bootstrapArg
 ] = Bare.argv
 
 const updates = updatesArg !== 'false'
@@ -44,6 +45,13 @@ const swarmEnabled = swarmArg !== 'false'
 const host = hostArg === undefined || hostArg === '' ? '127.0.0.1' : hostArg
 const publicUrl = publicUrlArg === undefined || publicUrlArg === '' ? null : publicUrlArg
 const webDir = webDirArg === undefined || webDirArg === '' ? null : webDirArg
+// bin.mjs already validated this; re-resolving here covers a worker started by
+// hand with only HIVE_DHT_BOOTSTRAP set, and keeps the malformed case fatal at
+// startup instead of at the first dial. `undefined` is the untouched default.
+const bootstrap = resolveBootstrap(
+  bootstrapArg === undefined || bootstrapArg === '' ? {} : { bootstrap: bootstrapArg },
+  env
+)
 
 const pipe = new FramedStream(Bare.IPC)
 const say = (type, payload = {}) => {
@@ -143,7 +151,7 @@ async function main () {
 
   let swarmTransport = null
   if (swarmEnabled) {
-    swarmTransport = new SwarmTransport(relay)
+    swarmTransport = new SwarmTransport(relay, { bootstrap })
     await swarmTransport.listen()
     say('swarm', { link: swarmTransport.link, publicKey: swarmTransport.publicKey })
   }

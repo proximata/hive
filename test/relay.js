@@ -4,7 +4,7 @@ const test = require('brittle')
 const core = require('hive-core')
 
 const { openStore } = require('hive-store')
-const { Relay, WebSocketTransport, resolveBind, MAX_FILTERS_PER_REQ, MAX_CREATED_AT_DRIFT_S, MAX_AUDIT_ENTRIES } = require('hive-relay')
+const { Relay, WebSocketTransport, resolveBind, resolveBootstrap, MAX_FILTERS_PER_REQ, MAX_CREATED_AT_DRIFT_S, MAX_AUDIT_ENTRIES } = require('hive-relay')
 const { MAX_PUT_USER_TARGETS } = require('hive-relay').handlers
 const { buildAuthEvent, buildNip98Header } = require('hive-auth')
 
@@ -397,6 +397,27 @@ test('the default bind is loopback and only --host widens it', (t) => {
   // --port 0 means "pick one", which the old `Number(flags.port) || 3000`
   // turned into 3000. The tests below depend on 0 meaning 0.
   t.is(resolveBind({ port: '0' }, {}).port, 0)
+})
+
+// The regression this guards: a LAN relay whose --bootstrap is a typo must not
+// boot happily onto the three public hyperdht nodes it cannot reach, and an
+// unset --bootstrap must stay byte-identical to the old no-options path.
+test('--bootstrap defaults to undefined and rejects malformed addresses', (t) => {
+  t.is(resolveBootstrap({}, {}), undefined, 'unset means hyperdht picks its own defaults')
+  t.is(resolveBootstrap({ swarm: false, host: '0.0.0.0' }, {}), undefined, 'no other flag implies one')
+
+  t.alike(resolveBootstrap({ bootstrap: '192.168.1.10:49737' }, {}), ['192.168.1.10:49737'])
+  t.alike(resolveBootstrap({ bootstrap: '10.0.0.2:49737, 10.0.0.3:49737' }, {}), ['10.0.0.2:49737', '10.0.0.3:49737'], 'comma-separated, whitespace trimmed')
+  t.alike(resolveBootstrap({}, { HIVE_DHT_BOOTSTRAP: '10.0.0.2:49737' }), ['10.0.0.2:49737'], 'env works too')
+  t.alike(resolveBootstrap({ bootstrap: '10.0.0.9:1' }, { HIVE_DHT_BOOTSTRAP: '10.0.0.2:49737' }), ['10.0.0.9:1'], 'flag beats env')
+  t.alike(resolveBootstrap({ bootstrap: '88.99.3.86@node1.hyperdht.org:49737' }, {}), ['88.99.3.86@node1.hyperdht.org:49737'], 'the ip@host:port hint form hyperdht itself uses')
+
+  t.exception(() => resolveBootstrap({ bootstrap: true }, {}), /--bootstrap requires a value/)
+  t.exception(() => resolveBootstrap({ bootstrap: '' }, {}), /--bootstrap requires a value/)
+  t.exception(() => resolveBootstrap({ bootstrap: '192.168.1.10' }, {}), /--bootstrap entries must be host:port/, 'no port is not "the default port"')
+  t.exception(() => resolveBootstrap({ bootstrap: '192.168.1.10:49737,' }, {}), /--bootstrap entries must be host:port/, 'a trailing comma is a typo, not an empty entry')
+  t.exception(() => resolveBootstrap({ bootstrap: 'host:70000' }, {}), /--bootstrap port must be 1-65535/)
+  t.exception(() => resolveBootstrap({ bootstrap: 'ho st:1234' }, {}), /--bootstrap entries must be host:port/)
 })
 
 test('the transport opens a loopback socket when no host is given', async (t) => {

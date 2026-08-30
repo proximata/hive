@@ -86,6 +86,45 @@ function publicOrigin (value) {
   return `${scheme}//${url.host}`
 }
 
+/**
+ * Resolve the DHT bootstrap list from `--bootstrap` / `HIVE_DHT_BOOTSTRAP`.
+ *
+ * Returns `undefined` when neither is given, which is not the same as an empty
+ * list: hyperdht does `opts.bootstrap || BOOTSTRAP_NODES` (hyperdht/index.js:28),
+ * so `[]` would silently mean "the three public nodes" and hide an operator
+ * typo. `undefined` is the untouched default path.
+ *
+ * The value is a comma-separated list of `host:port`, e.g.
+ * `HIVE_DHT_BOOTSTRAP=192.168.1.10:49737`. A malformed entry throws here, at
+ * startup, rather than at the first dial — a LAN deployment whose bootstrap
+ * address is wrong should refuse to boot, not look healthy and never discover
+ * a peer.
+ *
+ * ponytail: one flat list, no health checks, no failover ordering, no
+ * auto-publication. Upgrade path if that bites: carry the list wherever the
+ * relay's public URL already comes from, not a new config file for one value.
+ */
+function resolveBootstrap (flags = {}, env = {}) {
+  const raw = flags.bootstrap ?? env.HIVE_DHT_BOOTSTRAP ?? null
+  if (raw === null) return undefined
+
+  const value = one(raw, null, null, '--bootstrap')
+  const entries = value.split(',').map((entry) => entry.trim())
+  for (const entry of entries) {
+    // `host:port`, where host may be an IPv4 address or a hostname, optionally
+    // prefixed `ip@host` the way hyperdht's own defaults are written.
+    if (!/^(?:[0-9.]+@)?[A-Za-z0-9._-]+:\d{1,5}$/.test(entry)) {
+      throw new Error(`--bootstrap entries must be host:port, got ${JSON.stringify(entry)}`)
+    }
+    const port = Number(entry.slice(entry.lastIndexOf(':') + 1))
+    if (port < 1 || port > 65535) {
+      throw new Error(`--bootstrap port must be 1-65535, got ${JSON.stringify(entry)}`)
+    }
+  }
+
+  return entries
+}
+
 /** First supplied value, rejecting the shapes parseArgs produces for a flag with no argument. */
 function one (flag, fromEnv, fallback, label) {
   const value = flag ?? fromEnv ?? fallback
@@ -95,4 +134,4 @@ function one (flag, fromEnv, fallback, label) {
   return value
 }
 
-module.exports = { resolveBind, isLoopback, DEFAULT_HOST, DEFAULT_PORT }
+module.exports = { resolveBind, resolveBootstrap, isLoopback, DEFAULT_HOST, DEFAULT_PORT }

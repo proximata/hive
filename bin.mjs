@@ -10,7 +10,7 @@ import App from './app.js'
 import pkg from './package.json' with { type: 'json' }
 import { run as runCli, commands } from 'hive-cli'
 import { parseArgs } from 'hive-cli/lib/args.js'
-import { resolveBind } from 'hive-relay/lib/bind.js'
+import { resolveBind, resolveBootstrap } from 'hive-relay/lib/bind.js'
 
 // Entry point, following the hello-pear-bare shape: parse flags, resolve a
 // storage directory, construct the App, log its lifecycle.
@@ -41,6 +41,7 @@ const USAGE = `${appName} ${pkg.version} — ${pkg.description}
 
   hive relay [--host 127.0.0.1] [--port 3000] [--public-url <origin>]
              [--storage <dir>] [--web-dir <dir>] [--no-updates] [--no-swarm]
+             [--bootstrap host:port[,host:port]]
       Run the workspace relay: WebSocket + HTTP on --host:--port, and (unless
       --no-swarm) reachable peer-to-peer at hyper://<relay pubkey>.
       --host defaults to loopback and nothing but --host widens it: pass
@@ -48,6 +49,11 @@ const USAGE = `${appName} ${pkg.version} — ${pkg.description}
       --public-url is the origin clients reach when a TLS proxy sits in
       front, e.g. https://hive.example.com. NIP-98 signatures are bound to
       the full request URL, so behind a proxy this is not optional.
+      --bootstrap replaces hyperdht's three public bootstrap nodes, which is
+      what an offline LAN needs: run "npx hyperdht --bootstrap --host <lan-ip>
+      --port 49737" on one box and point every relay at it. Note this joins a
+      SEPARATE DHT, not the public one. Omitted, the public nodes are used
+      exactly as before.
       --web-dir serves the web client from a directory. A standalone binary
       cannot carry it, so a deploy ships packages/hive-web/public (plus a
       vendor/ copy of @noble) beside the binary and points here. Omitted,
@@ -70,7 +76,8 @@ Environment:
   HIVE_PRIVATE_KEY / BUZZ_PRIVATE_KEY  nsec1… or 64-character hex
   HIVE_RELAY_HOST HIVE_RELAY_PORT      relay bind address; flags win
   HIVE_PUBLIC_URL                      relay public origin; --public-url wins
-  HIVE_WEB_DIR                         web client directory; --web-dir wins`
+  HIVE_WEB_DIR                         web client directory; --web-dir wins
+  HIVE_DHT_BOOTSTRAP                   DHT bootstrap list; --bootstrap wins`
 
 if (flags.version === true || flags.v === true) {
   console.log(pkg.version)
@@ -142,8 +149,10 @@ const storage = flags.storage ?? flags.s ?? (isDev ? null : path.join(persistent
 const dir = storage ?? path.join(os.tmpdir(), 'hive', appName)
 
 let bind
+let bootstrap
 try {
   bind = resolveBind(flags, env)
+  bootstrap = resolveBootstrap(flags, env)
 } catch (err) {
   console.error(`[relay] ${err.message}`)
   Bare.exit(1)
@@ -160,7 +169,8 @@ const app = new App({
   port: bind.port,
   publicUrl: bind.publicUrl,
   webDir: flags.webDir ?? env.HIVE_WEB_DIR ?? null,
-  swarm: flags.swarm
+  swarm: flags.swarm,
+  bootstrap
 })
 
 // Say it once, loudly, at the moment it becomes true. A relay reachable from

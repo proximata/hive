@@ -8,7 +8,7 @@ const { MediaStore } = require('./lib/media')
 const { MAX_AUDIT_ENTRIES } = require('./lib/rest')
 const { WebSocketTransport } = require('./lib/transports/ws')
 const { SwarmTransport } = require('./lib/transports/swarm')
-const { resolveBind, isLoopback, DEFAULT_HOST, DEFAULT_PORT } = require('./lib/bind')
+const { resolveBind, resolveBootstrap, isLoopback, DEFAULT_HOST, DEFAULT_PORT } = require('./lib/bind')
 
 module.exports = {
   Relay,
@@ -24,6 +24,7 @@ module.exports = {
   WebSocketTransport,
   SwarmTransport,
   resolveBind,
+  resolveBootstrap,
   isLoopback,
   DEFAULT_HOST,
   DEFAULT_PORT
