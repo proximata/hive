@@ -1,9 +1,10 @@
 ---
 id: TASK-8
 title: 'Agent discovery verbs: hive agents list/find/get'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 00:37'
+updated_date: '2026-08-30 06:22'
 labels:
   - agents
   - cli
@@ -20,5 +21,5 @@ Agents are invisible from the CLI: store.getUser (sqlite-store.js:540-556) retur
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 hive agents find --capability code returns a seeded agent; hive agents get <pubkey> shows its description; tests added; skill/check.sh green
+- [x] #1 hive agents find --capability code returns a seeded agent; hive agents get <pubkey> shows its description; tests added; skill/check.sh green
 <!-- AC:END -->
