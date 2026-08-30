@@ -214,8 +214,12 @@ test('the QVAC provider explains itself when the SDK is absent', async (t) => {
   const { QvacProvider } = require('hive-agent')
   const provider = new QvacProvider({ model: 'LLAMA_3_2_1B_INST_Q4_0' })
 
-  // @qvac/sdk is optional: the relay and this suite must never need it.
-  await t.exception(provider.ready(), /npm install @qvac\/sdk/)
+  // @qvac/sdk is optional. This used to assert that provider.ready() rejects,
+  // which only held while the SDK was uninstalled: the moment it landed, the
+  // case failed. A test that passes only when the dependency is absent is
+  // testing the machine, not the code. Drive the fallback module directly
+  // instead, so the absent path is asserted whether or not the SDK is present.
+  t.exception(() => require('../packages/hive-agent/lib/qvac-absent.js'), /@qvac\/sdk is not installed/)
 
   // With an injected SDK the adapter drives the documented API shape.
   const calls = []

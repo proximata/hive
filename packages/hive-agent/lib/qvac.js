@@ -43,11 +43,40 @@ class QvacProvider extends InferenceProvider {
     return this.sdk
   }
 
+  // On Bare the SDK ships no plugins by default: the first call fails with
+  // WORKER_PLUGINS_NOT_REGISTERED unless the engine is registered up front.
+  // Registered lazily and once, because `plugins()` is process-global.
+  #registerPlugins (sdk) {
+    if (QvacProvider.pluginsRegistered === true) return
+    if (typeof sdk.plugins !== 'function') return
+    // The package `exports` map declares these subpaths with an "import"
+    // condition only, so Bare's `require` cannot resolve `@qvac/sdk/...`.
+    // ponytail: reached by relative file path instead. Ceiling — this breaks
+    // if the SDK moves its dist layout. Upgrade path: use `@qvac/bare-sdk`,
+    // which the SDK's own error message recommends for direct Bare usage.
+    const plugin = require('../../../node_modules/@qvac/sdk/dist/server/bare/plugins/llamacpp-completion/plugin.js')
+    sdk.plugins([plugin.llmPlugin])
+    QvacProvider.pluginsRegistered = true
+  }
+
+  // `loadModel` needs a descriptor carrying engine metadata, not a bare name:
+  // a plain string fails with MODEL_TYPE_REQUIRED. A persona names a model as
+  // a string, so resolve that name against the SDK's exported constants.
+  // An SDK that does not export the name is not an error: a caller may pass a
+  // descriptor the SDK understands, and the test suite injects a fake SDK that
+  // exports no constants at all. Pass the string through and let loadModel
+  // reject it, so this method resolves what it can and refuses nothing.
+  #resolveModel (sdk) {
+    if (typeof this.modelSrc !== 'string') return this.modelSrc
+    return sdk[this.modelSrc] ?? this.modelSrc
+  }
+
   async ready () {
     if (this.modelId !== null) return this.modelId
     const sdk = this.#load()
+    this.#registerPlugins(sdk)
 
-    const params = { modelSrc: this.modelSrc }
+    const params = { modelSrc: this.#resolveModel(sdk) }
     if (this.onProgress !== null) params.onProgress = this.onProgress
     if (this.delegate !== null) {
       params.delegate = {
@@ -112,7 +141,15 @@ class QvacProvider extends InferenceProvider {
         // contentDelta / toolCall / final.
         for await (const event of active.events) yield event
       })(),
-      final: started.then((active) => active.final)
+      // QVAC names the finished text `contentText`; the harness reads
+      // `content`. Without this the harness silently falls back to the
+      // concatenated deltas — right answer today, but wrong the moment a
+      // non-streaming run returns text with no deltas at all.
+      final: started.then((active) => active.final).then((final) => (
+        final !== null && typeof final === 'object' && final.content === undefined
+          ? { ...final, content: final.contentText }
+          : final
+      ))
     }
   }
 
