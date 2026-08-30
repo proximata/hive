@@ -453,7 +453,11 @@ async function createWorld ({ dir = null, relayUrl = null, swarm = true, seed = 
     }
 
     await attempt('audit', async () => {
-      const verification = await cli(actors.admin, ['audit', 'verify'])
+      // A remote relay does not hand out its key, so there is nobody here who
+      // may verify the chain; report unknown rather than a fabricated green.
+      const verification = relay === null
+        ? { ok: null }
+        : await cli({ secretKeyHex: core.toHex(relay.secretKey) }, ['audit', 'verify'])
       const entries = await cli(actors.admin, ['audit', 'list', '--limit', String(AUDIT_LIMIT)])
       state.audit = {
         verified: verification.ok,
@@ -588,6 +592,10 @@ async function createWorld ({ dir = null, relayUrl = null, swarm = true, seed = 
     swarmTransport,
     swarmKey: swarmTransport === null ? null : swarmTransport.publicKey,
     actors,
+    // The relay's own key. `audit verify` is a full-chain scan and the relay
+    // gates it to this key; null when attached to a remote relay, whose key
+    // this process does not hold.
+    operator: relay === null ? null : { name: 'operator', secretKeyHex: core.toHex(relay.secretKey) },
     cli,
     agent: null,
     startAgent,

@@ -296,7 +296,7 @@ hive messages send --channel <uuid> --content "the deploy is green"
 # Search messages
 hive messages search --query deploy
 
-# Verify audit chain
+# Verify audit chain (operator-only: run it with the relay's own key)
 hive audit verify
 ```
 

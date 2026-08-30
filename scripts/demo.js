@@ -215,7 +215,10 @@ steps:
 
     // ------------------------------------------------------------------ 8 --
     say('The audit chain covers everything and detects tampering')
-    const verification = await cli(alice, ['audit', 'verify'])
+    // Verifying the chain is a full scan, so the relay answers it only for
+    // its own key; listing it stays open to any authenticated caller.
+    const operator = { secretKeyHex: core.toHex(relay.secretKey) }
+    const verification = await cli(operator, ['audit', 'verify'])
     check('the chain verifies', verification.ok === true, `${verification.entries} entries`)
 
     const actions = new Set((await cli(alice, ['audit', 'list', '--limit', '100'])).map((e) => e.action))
@@ -224,7 +227,7 @@ steps:
       [...actions].join(', '))
 
     store.db.prepare("UPDATE audit_log SET actor = 'tampered' WHERE seq = 2").run()
-    const broken = await cli(alice, ['audit', 'verify'])
+    const broken = await cli(operator, ['audit', 'verify'])
     check('and a single edited row breaks it', broken.ok === false, `detected at entry ${broken.brokenAt}`)
 
     // ------------------------------------------------------------------ 9 --

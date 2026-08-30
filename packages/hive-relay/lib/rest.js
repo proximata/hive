@@ -21,6 +21,11 @@ const KIND_LABELS = Object.fromEntries(
 
 const MAX_BODY_BYTES = LIMITS.MAX_MEDIA_BYTES
 
+// GET /api/audit reads rows and hashes them; an unbounded `limit` is a free
+// full scan. The store clamps to its own feed maximum too, this is the ceiling
+// the endpoint itself promises.
+const MAX_AUDIT_ENTRIES = 200
+
 function readBody (req, limit = LIMITS.MAX_FRAME_BYTES) {
   return new Promise((resolve, reject) => {
     const chunks = []
@@ -331,9 +336,32 @@ function createRestRouter (relay, opts = {}) {
     }
 
     if (req.method === 'GET' && path === '/api/audit') {
+      // The write path is rate limited (relay.js, EVENT only) and this read was
+      // not, which made it the cheapest way to keep the loop busy.
+      if (!relay.rateLimiter.allow(context.pubkey)) {
+        return json(res, 429, { error: 'rate_limited', message: 'slow down' })
+      }
+
+      // Chain verification is a full scan plus a sha256 per row, synchronously,
+      // on Bare's single loop. It is an operator's integrity check, not a
+      // per-caller read, so it is gated rather than paginated: paginating it
+      // would verify a window, and a window proves nothing about a hash chain.
+      //
+      // ponytail: "operator" is whoever holds the relay's own key. Upgrade path
+      // when a second operator needs it: an explicit opts.operators allowlist.
+      const operator = context.pubkey === relay.pubkey
+
+      // Audit rows carry channel_id and actor, so unfiltered they disclose who
+      // is in a private channel to anyone with any key at all.
+      const accessible = relay.store.accessibleChannelIds(context.pubkey)
+      const limit = Math.min(Number(url.searchParams.get('limit')) || 100, MAX_AUDIT_ENTRIES)
+      const entries = relay.store
+        .listAudit({ limit })
+        .filter((entry) => entry.channelId === null || entry.channelId === undefined || accessible.has(entry.channelId))
+
       return json(res, 200, {
-        verification: relay.store.verifyAuditChain(),
-        entries: relay.store.listAudit({ limit: Number(url.searchParams.get('limit')) || 100 })
+        verification: operator ? relay.store.verifyAuditChain() : null,
+        entries
       })
     }
 

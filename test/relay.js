@@ -1018,6 +1018,42 @@ test('the audit chain records the pipeline and verifies', async (t) => {
   t.ok(actions.includes('EventCreated'))
 })
 
+test('GET /api/audit hides private-channel rows and gates verification', async (t) => {
+  const { RateLimiter } = require('hive-auth')
+  const h = await harness(t, { rateLimiter: new RateLimiter({ tier: 'human' }) })
+
+  const alice = identity('alice')
+  const eve = identity('eve')
+  const aliceClient = await member(h, alice)
+
+  const secret = await makeChannel(h, alice, aliceClient, [['name', 'secret'], ['visibility', 'private']])
+  await aliceClient.publish(message(alice, secret, 'private business'))
+
+  // Eve holds a perfectly good key and is in nothing.
+  const seen = await rest(h, eve, '/api/audit')
+  t.is(seen.status, 200)
+  t.absent(seen.text.includes(secret), 'a private channel id is not disclosed to a non-member')
+  t.is(seen.json.verification, null, 'chain verification is operator-only')
+
+  // Alice is the owner, so her own channel's rows are hers to see.
+  const mine = await rest(h, alice, '/api/audit')
+  t.ok(mine.text.includes(secret), 'a member still sees their own channel')
+  t.is(mine.json.verification, null, 'membership is not operatorship')
+
+  // The operator is whoever holds the relay key.
+  const operator = { secretKey: h.relay.secretKey }
+  const opView = await rest(h, operator, '/api/audit')
+  t.is(opView.json.verification.ok, true, 'the operator gets the full-scan integrity check')
+
+  // And the endpoint is on the limiter now, so it cannot be used as a free
+  // scan loop the way it could when only EVENT was limited.
+  let limited = 0
+  for (let i = 0; i < 80; i++) {
+    if ((await rest(h, eve, '/api/audit')).status === 429) limited++
+  }
+  t.ok(limited > 0, 'repeated audit reads are rate limited')
+})
+
 // -------------------------------------------------------------- rate limits --
 
 test('rate limiting refuses excess events', async (t) => {

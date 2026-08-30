@@ -558,6 +558,12 @@ const commands = {
 
   'audit verify': async (ctx) => {
     const result = await ctx.client.get('/api/audit', { limit: 1 })
+    // Verifying the chain is a full scan plus a hash per row, so the relay
+    // answers it only for the operator key and returns null to everyone else.
+    // Say so, rather than printing `null` and looking like an intact chain.
+    if (result.verification === null) {
+      throw new CliError('user', 'audit verify is operator-only; run it with the relay key')
+    }
     return result.verification
   },
 

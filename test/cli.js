@@ -528,12 +528,20 @@ test('one agent cannot read another agent’s memory', async (t) => {
 test('audit verify reports an intact chain, and a broken one', async (t) => {
   const h = await harness(t)
   const alice = identity('alice')
+  // Chain verification is a full scan and is gated to the relay's own key.
+  const operator = { secretKeyHex: core.toHex(h.relay.secretKey) }
 
   await h.cli(alice, ['channels', 'create', '--name', 'general'])
 
-  const intact = await h.cli(alice, ['audit', 'verify'])
+  const intact = await h.cli(operator, ['audit', 'verify'])
   t.is(intact.out.ok, true)
   t.is(intact.out.brokenAt, null)
+
+  // An ordinary key is told why, rather than being shown a null that reads
+  // like an intact chain.
+  const refused = await h.cli(alice, ['audit', 'verify'])
+  t.is(refused.exitCode, 1)
+  t.ok(refused.err.message.includes('operator-only'))
 
   const listed = await h.cli(alice, ['audit', 'list', '--limit', '10'])
   t.ok(listed.out.length > 0)
@@ -542,7 +550,7 @@ test('audit verify reports an intact chain, and a broken one', async (t) => {
   // Tamper directly with the database, as an attacker with disk access would.
   h.store.db.prepare("UPDATE audit_log SET actor = 'someone-else' WHERE seq = 2").run()
 
-  const broken = await h.cli(alice, ['audit', 'verify'])
+  const broken = await h.cli(operator, ['audit', 'verify'])
   t.is(broken.out.ok, false)
   t.is(broken.out.brokenAt, 2)
 })

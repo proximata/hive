@@ -701,6 +701,9 @@ const scenes = [
       for (const actor of [admin, alice, bob, honey, carol]) {
         world.store.addRelayMember(actor.pubkey, actor === admin ? 'admin' : 'member')
       }
+      // The relay's own key is a caller too — it is what `audit verify` in a
+      // later scene authenticates as — and the roster is relay-wide.
+      world.store.addRelayMember(world.relay.pubkey, 'admin')
       world.relay.policy.requireRelayMembership = true
 
       ui.say('requireRelayMembership = true, and carol is on the roster')
@@ -810,11 +813,15 @@ const scenes = [
     async run (ctx) {
       const { world, ui } = ctx
       const m = memo(world)
-      const { admin } = world.actors
 
       ui.focus('audit')
+
+      // Chain verification is a full scan plus a hash per row, so the relay
+      // answers it only for its own key.
+      if (world.operator === null) return skip(degrade(ctx, 'verifying the audit chain'))
+
       ui.say('hive audit verify')
-      const green = await world.cli(admin, ['audit', 'verify'])
+      const green = await world.cli(world.operator, ['audit', 'verify'])
       ui.say(`ok=${green.ok} over ${green.entries} entries`)
       await ui.pause(600)
 
@@ -834,7 +841,7 @@ const scenes = [
       try {
         ui.say(`UPDATE audit_log SET actor = 'tampered' WHERE seq = ${victim.seq}`)
         world.store.db.prepare("UPDATE audit_log SET actor = 'tampered' WHERE seq = ?").run(victim.seq)
-        broken = await world.cli(admin, ['audit', 'verify'])
+        broken = await world.cli(world.operator, ['audit', 'verify'])
         ui.say(`ok=${broken.ok}, detected at entry ${broken.brokenAt}`)
         await ui.pause(800)
       } finally {
@@ -844,7 +851,7 @@ const scenes = [
         world.store.db.prepare('UPDATE audit_log SET actor = ? WHERE seq = ?').run(victim.actor, victim.seq)
       }
 
-      const restored = await world.cli(admin, ['audit', 'verify'])
+      const restored = await world.cli(world.operator, ['audit', 'verify'])
       ui.say(`row restored, ok=${restored.ok}`)
 
       m.audit = { green, broken, restored, victim }
