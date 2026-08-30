@@ -6,3 +6,6 @@ out/
 .tmp/
 storage/
 /tmp/
+
+# firecrawl scratch cache from research runs
+.firecrawl/
