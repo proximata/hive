@@ -1,9 +1,10 @@
 ---
 id: TASK-2
 title: Cap /api/audit scan and gate private-channel metadata
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 00:37'
+updated_date: '2026-08-30 06:15'
 labels:
   - security
   - relay

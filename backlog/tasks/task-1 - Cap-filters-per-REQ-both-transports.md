@@ -1,9 +1,10 @@
 ---
 id: TASK-1
 title: Cap filters per REQ (both transports)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 00:37'
+updated_date: '2026-08-30 06:15'
 labels:
   - security
   - relay

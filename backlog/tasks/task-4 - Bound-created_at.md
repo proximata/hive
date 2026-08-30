@@ -1,9 +1,10 @@
 ---
 id: TASK-4
 title: Bound created_at
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 00:37'
+updated_date: '2026-08-30 06:15'
 labels:
   - security
   - relay

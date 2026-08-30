@@ -1,9 +1,10 @@
 ---
 id: TASK-3
 title: Validate p tags and cap putUser fan-out
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 00:37'
+updated_date: '2026-08-30 06:15'
 labels:
   - security
   - relay

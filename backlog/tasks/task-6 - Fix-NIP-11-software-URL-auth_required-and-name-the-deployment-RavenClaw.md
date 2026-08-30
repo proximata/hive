@@ -1,9 +1,10 @@
 ---
 id: TASK-6
 title: 'Fix NIP-11: software URL, auth_required, and name the deployment RavenClaw'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 00:37'
+updated_date: '2026-08-30 06:15'
 labels:
   - docs
   - relay
