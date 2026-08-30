@@ -22,9 +22,11 @@ const KIND_LABELS = Object.fromEntries(
 const MAX_BODY_BYTES = LIMITS.MAX_MEDIA_BYTES
 
 // GET /api/audit reads rows and hashes them; an unbounded `limit` is a free
-// full scan. The store clamps to its own feed maximum too, this is the ceiling
-// the endpoint itself promises.
-const MAX_AUDIT_ENTRIES = 200
+// full scan. This is the store's own ceiling rather than a second, looser
+// number: a 200 here could never bind, because listAudit already clamps to
+// feedMaxLimit (LIMITS.FEED_MAX_LIMIT = 100), so the endpoint would have been
+// advertising a cap that never fired.
+const MAX_AUDIT_ENTRIES = LIMITS.FEED_MAX_LIMIT
 
 function readBody (req, limit = LIMITS.MAX_FRAME_BYTES) {
   return new Promise((resolve, reject) => {
@@ -393,4 +395,4 @@ function safeJson (body) {
   }
 }
 
-module.exports = { createRestRouter, readBody, json }
+module.exports = { createRestRouter, readBody, json, MAX_AUDIT_ENTRIES }

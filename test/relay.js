@@ -4,7 +4,7 @@ const test = require('brittle')
 const core = require('hive-core')
 
 const { openStore } = require('hive-store')
-const { Relay, WebSocketTransport, resolveBind, MAX_FILTERS_PER_REQ, MAX_CREATED_AT_DRIFT_S } = require('hive-relay')
+const { Relay, WebSocketTransport, resolveBind, MAX_FILTERS_PER_REQ, MAX_CREATED_AT_DRIFT_S, MAX_AUDIT_ENTRIES } = require('hive-relay')
 const { MAX_PUT_USER_TARGETS } = require('hive-relay').handlers
 const { buildAuthEvent, buildNip98Header } = require('hive-auth')
 
@@ -1130,6 +1130,29 @@ test('GET /api/audit hides private-channel rows and gates verification', async (
     if ((await rest(h, eve, '/api/audit')).status === 429) limited++
   }
   t.ok(limited > 0, 'repeated audit reads are rate limited')
+})
+
+test('GET /api/audit clamps limit, so a caller cannot buy a full scan', async (t) => {
+  const h = await harness(t)
+  const alice = identity('alice')
+  const client = await member(h, alice)
+  const chan = await makeChannel(h, alice, client)
+
+  // More rows than the ceiling, so a clamp that never fires would be visible.
+  for (let i = 0; i < MAX_AUDIT_ENTRIES + 60; i++) {
+    await client.publish(message(alice, chan, `row ${i}`))
+  }
+  const total = h.store.db.prepare('SELECT COUNT(*) AS n FROM audit_log').get().n
+  t.ok(total > MAX_AUDIT_ENTRIES, `the store really holds more than the cap (${total})`)
+
+  const huge = await rest(h, alice, `/api/audit?limit=${MAX_AUDIT_ENTRIES * 50}`)
+  t.is(huge.status, 200)
+  t.ok(huge.json.entries.length <= MAX_AUDIT_ENTRIES, `asking for 10000 returns at most ${MAX_AUDIT_ENTRIES}`)
+  t.is(huge.json.entries.length, MAX_AUDIT_ENTRIES, 'and it is the cap that bounds it, not a short store')
+
+  // A smaller limit is still the caller's to choose.
+  const small = await rest(h, alice, '/api/audit?limit=10')
+  t.is(small.json.entries.length, 10)
 })
 
 // -------------------------------------------------------------- rate limits --

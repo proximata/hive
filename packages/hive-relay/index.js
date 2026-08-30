@@ -5,6 +5,7 @@ const { SubscriptionRegistry, channelsFromFilters } = require('./lib/subscriptio
 const protocol = require('./lib/protocol')
 const handlers = require('./lib/handlers')
 const { MediaStore } = require('./lib/media')
+const { MAX_AUDIT_ENTRIES } = require('./lib/rest')
 const { WebSocketTransport } = require('./lib/transports/ws')
 const { SwarmTransport } = require('./lib/transports/swarm')
 const { resolveBind, isLoopback, DEFAULT_HOST, DEFAULT_PORT } = require('./lib/bind')
@@ -14,6 +15,7 @@ module.exports = {
   Connection,
   MAX_FILTERS_PER_REQ,
   MAX_CREATED_AT_DRIFT_S,
+  MAX_AUDIT_ENTRIES,
   SubscriptionRegistry,
   channelsFromFilters,
   protocol,
