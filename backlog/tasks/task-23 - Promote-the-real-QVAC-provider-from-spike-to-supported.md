@@ -1,9 +1,10 @@
 ---
 id: TASK-23
 title: Promote the real QVAC provider from spike to supported
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 05:17'
+updated_date: '2026-09-01 07:26'
 labels:
   - agents
 dependencies: []

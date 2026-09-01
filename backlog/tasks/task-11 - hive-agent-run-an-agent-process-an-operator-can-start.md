@@ -1,10 +1,10 @@
 ---
 id: TASK-11
 title: 'hive agent run: an agent process an operator can start'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 00:37'
-updated_date: '2026-08-30 00:37'
+updated_date: '2026-09-01 07:26'
 labels:
   - agents
   - cli

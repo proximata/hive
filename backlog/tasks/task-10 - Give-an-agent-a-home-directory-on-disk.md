@@ -1,9 +1,10 @@
 ---
 id: TASK-10
 title: Give an agent a home directory on disk
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 00:37'
+updated_date: '2026-09-01 07:26'
 labels:
   - agents
 dependencies: []
