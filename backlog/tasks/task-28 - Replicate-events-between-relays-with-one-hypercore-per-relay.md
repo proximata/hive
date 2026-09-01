@@ -1,10 +1,10 @@
 ---
 id: TASK-28
 title: Replicate events between relays with one hypercore per relay
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 05:35'
-updated_date: '2026-08-30 05:50'
+updated_date: '2026-09-01 05:58'
 labels:
   - relay
   - transport
@@ -28,12 +28,18 @@ RISKS TO DESIGN FOR, not to discover later:
 3. Storage is unbounded - every relay ends up holding everything from everyone. Acceptable at 3 nodes, not a plan. Name the trigger for selective replication rather than building it now.
 4. Trust is transitive: relay A replicating from B accepts whatever B accepted, including anything B's own limiter let through.
 5. The temporary topology is 3 nodes on ONE VM, which shares a failure domain and proves convergence only, never availability.
+
+SHIPPED (commit 4b229c6, not deployed): packages/hive-relay/lib/transports/replication.js, opt-in behind `--replicate <group>` / HIVE_REPLICATE_TOPIC (resolveReplication in lib/bind.js). Absent, no corestore is opened and no topic joined. Ingest reuses the pipeline via `relay.ingestFromPeer` (lib/relay.js), which pre-authenticates the internal connection and overrides the per-connection limiter; the cap is per feed at the reader and PACES rather than drops (DEFAULT_INGEST_EVENTS_PER_SECOND = 200). Discovery is free: the replication keypair is both the Hyperswarm identity and the core signer, so a peer's core key is its remotePublicKey - no announcement protocol. Manifest version pinned to 1 so both sides derive the same key. 14 tests in test/replication.js, two whole relays each.
+
+FOLLOW-UPS deliberately not built, each with its trigger:
+- No backfill: a relay that enables replication with history already in SQLite publishes only what it accepts from then on. Trigger: the first operator who turns it on for an existing store and expects the past to travel.
+- No re-publish of a peer's events, so propagation is direct only and trust stays one hop deep. Trigger: the first non-full-mesh topology.
+- Selective replication (channel allowlist or kind filter while tailing). Trigger: the first relay that wants a subset, not a size threshold.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Two relay processes share one autobase, an event posted to either appears in both, and the SQLite view converges to identical state regardless of arrival order
-- [ ] #2 An event posted to relay A appears in relay B's store via replication and not via a client connection
-- [ ] #3 Two relays fed the same events in opposite order converge to identical query results
-- [ ] #4 Re-replicating a full history inserts no duplicates and does not grow the store
+- [x] #1 An event posted to relay A appears in relay B's store via replication and not via a client connection
+- [x] #2 Two relays fed the same events in opposite order converge to identical query results
+- [x] #3 Re-replicating a full history inserts no duplicates and does not grow the store
 <!-- AC:END -->
