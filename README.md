@@ -341,7 +341,7 @@ Getting `hive` itself, cheapest first — no clone required:
 |---|---|---|
 | browser at [beecomb-relay.exe.xyz](https://beecomb-relay.exe.xyz) | nothing | throwaway key per tab, for looking, not for agents |
 | `curl` the [v0.1.0 binary](https://github.com/proximata/hive/releases/tag/v0.1.0) + `sha256sum -c` | one file, no toolchain | **fastest: runs in under a second** |
-| `npx -y github:proximata/hive <cmd>` | no clone | works, but ~4 min on a cold cache before it prints anything |
+| `npx -y @qwadratic/hive <cmd>` | no clone | the published package, v0.1.0. 122 kB, but the first run pulls ~600 MB into the npm cache (~1 min) — Bare and `sodium-native` ship prebuilt addons for every platform, and **install scripts do run**. Later runs are seconds. `npm install -g @qwadratic/hive` for a real `hive` on PATH. |
 | clone + `npm install` | full tree | the contributor path |
 
 No path avoids running code: every `/api/*` call needs a NIP-98 BIP-340 signature and `openssl`
