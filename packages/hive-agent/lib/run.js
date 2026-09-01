@@ -42,13 +42,16 @@ async function startAgent ({
   attestation = null,
   channel = null,
   timeout = 5000,
-  onError = null
+  onError = null,
+  log = null
 }) {
   const connection = new RelayConnection({ url: websocket(url), secretKey, bootstrap, reconnect })
   await connection.connect()
 
   const agent = new Agent({
-    secretKey, owner, persona, provider, home, connection, maxHops, attestation
+    // `log` is for the provider the Agent builds from the persona: a qvac model
+    // download is minutes of silence otherwise. See qvac.js `#announce`.
+    secretKey, owner, persona, provider, home, connection, maxHops, attestation, log
   })
 
   if (onError !== null) {
@@ -80,6 +83,19 @@ function once (emitter, name, timeout) {
       resolve(args)
     })
   })
+}
+
+/**
+ * Leave.
+ *
+ * `Bare.exit` tears the runtime down including its worker threads;
+ * `process.exit` on bare-process waits for them, which is the wrong half of
+ * the contract here — measured with @qvac/sdk 0.18.2, whose llamacpp worker
+ * outlives unloadModel and left SIGTERM hanging indefinitely.
+ */
+function exit (code) {
+  if (typeof globalThis.Bare?.exit === 'function') globalThis.Bare.exit(code)
+  else process.exit(code)
 }
 
 /** RelayConnection speaks WebSocket; an operator will type whatever they have. */
@@ -199,6 +215,7 @@ async function runAgent ({
     url: relayUrl,
     bootstrap,
     channel,
+    log,
     onError: (err) => log(`[agent] error: ${err.message}`)
   })
 
@@ -217,6 +234,8 @@ async function runAgent ({
   log('[agent] running. Ctrl-C to stop.')
 
   let stopping = false
+
+  /** Full teardown, for an embedder that is not exiting. Tests use this. */
   const stop = async () => {
     if (stopping) return
     stopping = true
@@ -226,14 +245,60 @@ async function runAgent ({
     log('[agent] stopped')
   }
 
+  /**
+   * Teardown for a process that is on its way out, which is NOT the same thing.
+   *
+   * The relay socket is closed — that is the part another machine can observe,
+   * and a clean close is worth having. The provider is deliberately NOT
+   * unloaded: measured on @qvac/sdk 0.18.2 under Bare, `unloadModel` blocks the
+   * JS thread and never returns, so every timer, every promise and any deadline
+   * guarding it is starved with it, and SIGTERM leaves a process an init system
+   * has to SIGKILL. Weights belong to a process that is about to stop existing,
+   * so letting the OS reclaim them is the correct trade.
+   *
+   * ponytail: ceiling — an SDK that wanted to flush something on unload does
+   * not get to. Upgrade path: @qvac/bare-sdk, which owns its Bare worker
+   * lifecycle, or an unloadModel that yields.
+   */
+  const stopAndExit = async () => {
+    for (const [signal, handler] of handlers) process.removeListener(signal, handler)
+    log('\n[agent] shutting down')
+    try {
+      await agent.connection.close()
+    } catch {
+      // A socket already gone is the outcome being asked for.
+    }
+    log('[agent] stopped')
+
+    // A resident inference worker makes a graceful exit impossible, not slow.
+    // Measured on @qvac/sdk 0.18.2 under Bare, model loaded: `Bare.exit(0)`
+    // neither exits nor returns — it blocks inside runtime teardown waiting for
+    // the llamacpp thread, so nothing after it runs and no timer armed before
+    // it ever fires. There is no second chance to take, which is why this is
+    // decided BEFORE exiting rather than as a fallback.
+    //
+    // ponytail: SIGKILL costs the exit code — 137, not 0 — and a unit file
+    // wants `SuccessExitStatus=SIGKILL`. Ceiling accepted because the socket is
+    // already closed and the alternative is a process an operator has to kill
+    // by hand. Upgrade path: @qvac/bare-sdk, which owns its Bare worker
+    // lifecycle, or an SDK teardown that joins its threads.
+    if (agent.provider?.modelId != null) {
+      log('[agent] an inference worker is still resident, which blocks a graceful exit — ' +
+          'this process exits 137 by SIGKILL (expected; systemd: SuccessExitStatus=SIGKILL)')
+      process.kill(process.pid, 'SIGKILL')
+    }
+
+    exit(0)
+  }
+
   const handlers = []
   if (signals) {
     for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
       const handler = () => {
-        // A second signal is an operator saying they will not wait for a model
-        // to unload. Honour it rather than looking hung.
-        if (stopping) return process.exit(130)
-        stop().then(() => process.exit(0), () => process.exit(1))
+        // A second signal is an operator who will not wait. Honour it.
+        if (stopping) return exit(130)
+        stopping = true
+        stopAndExit().catch(() => exit(1))
       }
       handlers.push([signal, handler])
       process.on(signal, handler)

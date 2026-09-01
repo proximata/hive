@@ -281,6 +281,52 @@ test('the QVAC provider explains itself when the SDK is absent', async (t) => {
   t.is(completionParams.history[0].content, 'be helpful')
 })
 
+test('a persona names a model by size, an SDK constant, or not at all', async (t) => {
+  const { QvacProvider, MODELS, DEFAULT_MODEL } = require('hive-agent/lib/qvac.js')
+
+  // The descriptor shape @qvac/sdk actually exports, trimmed to what is read.
+  const fake = {
+    LLAMA_3_2_1B_INST_Q4_0: { name: 'LLAMA_3_2_1B_INST_Q4_0', expectedSize: 807_000_000 },
+    QWEN3_4B_INST_Q4_K_M: { name: 'QWEN3_4B_INST_Q4_K_M', expectedSize: 2_500_000_000 },
+    loadModel: async (params) => {
+      fake.params = params
+      // Two ticks either side of a 10% boundary: the log must not repeat.
+      params.onProgress?.({ percentage: 4 })
+      params.onProgress?.({ percentage: 7 })
+      params.onProgress?.({ percentage: 100 })
+      return 'model-1'
+    }
+  }
+
+  t.is(new QvacProvider({}).modelSrc, DEFAULT_MODEL, 'a persona with no model gets the smallest one')
+  t.is(MODELS.small, 'LLAMA_3_2_1B_INST_Q4_0')
+
+  const lines = []
+  const sized = new QvacProvider({ model: 'medium', sdk: fake, log: (line) => lines.push(line) })
+  await sized.ready()
+  t.is(fake.params.modelSrc.name, 'QWEN3_4B_INST_Q4_K_M', 'the size alias resolved to a descriptor')
+
+  // A silent multi-minute download is the failure this prevents.
+  t.ok(lines[0].includes('2.5 GB'), `the size is said up front: ${lines[0]}`)
+  t.ok(lines[0].includes('first load downloads'), 'and that the first load is a download')
+  t.alike(lines.slice(1), ['[qvac] QWEN3_4B_INST_Q4_K_M: 0%', '[qvac] QWEN3_4B_INST_Q4_K_M: 100%'],
+    'progress reports every 10%, not every tick')
+
+  // An exact SDK constant still works, and one this SDK does not export is
+  // passed through rather than refused — a caller may know a newer name.
+  const exact = new QvacProvider({ model: 'LLAMA_3_2_1B_INST_Q4_0', sdk: fake })
+  await exact.ready()
+  t.is(fake.params.modelSrc.expectedSize, 807_000_000)
+
+  const unknown = new QvacProvider({ model: 'LLAMA_9_FUTURE_Q4_0', sdk: fake })
+  await unknown.ready()
+  t.is(fake.params.modelSrc, 'LLAMA_9_FUTURE_Q4_0')
+
+  // A lowercase name that is not an alias is a persona typo. Name the aliases.
+  const typo = new QvacProvider({ model: 'llama-3.2-1b', sdk: fake })
+  await t.exception(typo.ready(), /unknown model "llama-3\.2-1b": use one of small, medium, large/)
+})
+
 // ---------------------------------------------------------------- harness --
 
 test('an agent publishes a capability profile on start', async (t) => {
