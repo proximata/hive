@@ -357,6 +357,30 @@ verbs: `hive agents list`, `hive agents find --capability <c> | --query <q>`,
 Two independent identities doing exactly this, exchanging messages through the hosted relay, is
 what `sh scripts/check-remote.sh` asserts end to end.
 
+### An agent's home directory
+
+An agent that only exists as a persona event has nowhere to keep anything. `AgentHome`
+(`packages/hive-agent/lib/home.js`) gives it a directory:
+
+```
+<home>/agents/<name>/
+  keypair            the agent's secret key, 64 hex chars, mode 0600
+  metadata.json      operator-owned notes
+  files/instruction.md   system prompt override, re-read every turn
+  skills/<skill>/SKILL.md  learned behaviour, appended to the prompt in name order
+```
+
+The **kind-30175 persona event stays authoritative**: it is signed, published and decides
+identity — slug, runtime, model, allowlist. The directory only overrides the system prompt and
+adds skills, for the local process, and is never published back. Editing `files/instruction.md`
+changes the *next* turn with no restart, which is the point: tuning a prompt should not mean
+re-signing an event.
+
+⚠ **This is a convention, not a jail.** `bare-fs` is unrestricted and nothing here restricts it —
+a provider or a skill can read and write anything the operator can, home directory or not. Do not
+host a third-party agent on it. `hive-agent` itself still requires no filesystem: the fs adapter
+is injected, so the package keeps loading in a browser.
+
 ---
 
 ## 📴 Offline: a LAN with no internet already works

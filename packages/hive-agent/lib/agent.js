@@ -59,6 +59,13 @@ class Agent extends EventEmitter {
     this.persona = opts.persona ?? null
     this.attestation = opts.attestation ?? null
 
+    // An optional AgentHome (lib/home.js). The persona event stays
+    // authoritative for identity; the home only overrides the system prompt and
+    // adds skills, re-read every turn so an edit lands on the next message.
+    // Absent — the default, and what every test and the browser do — nothing
+    // here touches a filesystem at all.
+    this.home = opts.home ?? null
+
     // Free text is the only field `hive agents find --query` can match: the
     // slug in `persona` is one token nobody searches for. Taken from the
     // persona when the persona carries one, so a deployed agent is findable
@@ -408,9 +415,8 @@ class Agent extends EventEmitter {
   async _buildHistory (channelId, batch) {
     const history = []
 
-    if (this.persona?.system_prompt) {
-      history.push({ role: 'system', content: this.persona.system_prompt })
-    }
+    const system = this._systemPrompt()
+    if (system) history.push({ role: 'system', content: system })
 
     for (const event of batch) {
       history.push({
@@ -421,6 +427,25 @@ class Agent extends EventEmitter {
     }
 
     return history.slice(-this.historyLimit)
+  }
+
+  /**
+   * The system prompt for this turn.
+   *
+   * A home directory overrides the persona's prompt and appends its skills. A
+   * home that cannot be read is recorded and stepped over rather than allowed
+   * to fail the turn: an agent that stops answering because a file was being
+   * edited under it is worse than one running last minute's prompt.
+   */
+  _systemPrompt () {
+    if (this.home !== null) {
+      try {
+        return this.home.systemPrompt(this.persona)
+      } catch (err) {
+        this._raise(err)
+      }
+    }
+    return this.persona?.system_prompt ?? null
   }
 
   /**

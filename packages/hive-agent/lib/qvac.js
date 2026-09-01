@@ -108,7 +108,11 @@ class QvacProvider extends InferenceProvider {
   }
 
   complete ({ history = [], tools = [], signal = null } = {}) {
-    const messages = this.systemPrompt === null
+    // Only when the caller did not bring one. The harness builds the system
+    // message itself (agent.js `_systemPrompt`), so prepending unconditionally
+    // sent the model two system turns — and the stale one first, which is
+    // exactly wrong once a home directory overrides the persona's prompt.
+    const messages = this.systemPrompt === null || history[0]?.role === 'system'
       ? history
       : [{ role: 'system', content: this.systemPrompt }, ...history]
 

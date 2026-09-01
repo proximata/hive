@@ -6,7 +6,7 @@ const { events } = require('hive-sdk')
 
 const { openStore } = require('hive-store')
 const { Relay, WebSocketTransport } = require('hive-relay')
-const { Agent, MockProvider, RelayConnection, providerFromPersona, CAPABILITIES } = require('hive-agent')
+const { Agent, AgentHome, MockProvider, RelayConnection, providerFromPersona, CAPABILITIES } = require('hive-agent')
 
 const { identity, sign } = require('./helpers')
 
@@ -665,4 +665,159 @@ test('no allowlist means anyone may ask — the default stays permissive', async
   }))
   const [reply] = await replied
   t.is(reply.pubkey, bot.pubkey, 'the agent answered someone it was never told about')
+})
+
+// ------------------------------------------------------------------- home --
+
+/**
+ * An in-memory fs adapter.
+ *
+ * The point of the injection is that `hive-agent` never requires bare-fs, and a
+ * test that only ever drove it with the real one would not prove that. Files
+ * are a flat Map keyed by path; directories are recorded as a Set, because
+ * `readdirSync` on the skills directory is the only listing the class does.
+ */
+function memfs () {
+  const files = new Map()
+  const dirs = new Set()
+  const modes = new Map()
+
+  return {
+    files,
+    modes,
+    existsSync: (p) => files.has(p) || dirs.has(p),
+    mkdirSync: (p) => {
+      const parts = p.split('/')
+      for (let i = 1; i <= parts.length; i++) dirs.add(parts.slice(0, i).join('/'))
+    },
+    readFileSync: (p) => {
+      if (!files.has(p)) throw new Error(`ENOENT: ${p}`)
+      return files.get(p)
+    },
+    writeFileSync: (p, data) => {
+      files.set(p, data)
+      dirs.add(p.slice(0, p.lastIndexOf('/')))
+    },
+    readdirSync: (p) => {
+      const prefix = p + '/'
+      const names = new Set()
+      for (const key of [...files.keys(), ...dirs]) {
+        if (!key.startsWith(prefix)) continue
+        names.add(key.slice(prefix.length).split('/')[0])
+      }
+      return [...names]
+    },
+    chmodSync: (p, mode) => modes.set(p, mode)
+  }
+}
+
+test('an agent home is a layout over an injected fs, and rejects a name that escapes it', (t) => {
+  const fs = memfs()
+  const home = new AgentHome({ root: '/srv/hive', name: 'honey', fs }).create()
+
+  t.is(home.dir, '/srv/hive/agents/honey')
+  t.is(home.readInstruction(), null, 'a fresh home has no prompt override')
+  t.alike(home.readSkills(), [])
+  t.alike(home.readMetadata(), {})
+
+  // A name is interpolated into a path and arrives from an operator flag.
+  t.exception(() => new AgentHome({ root: '/srv/hive', name: '../../etc', fs }), /invalid agent name/)
+  t.exception(() => new AgentHome({ root: '/srv/hive', name: 'a/b', fs }), /invalid agent name/)
+  t.exception(() => new AgentHome({ root: '/srv/hive', name: 'honey' }), /injected fs adapter/,
+    'the package has no fs of its own to fall back on')
+
+  // The persona is authoritative for identity; the home overrides the prompt.
+  const persona = { slug: 'honey', runtime: 'mock', system_prompt: 'from the persona event' }
+  t.is(home.systemPrompt(persona), 'from the persona event')
+
+  fs.writeFileSync('/srv/hive/agents/honey/files/instruction.md', 'from the file\n')
+  t.is(home.systemPrompt(persona), 'from the file', 'instruction.md wins over the persona prompt')
+
+  fs.writeFileSync('/srv/hive/agents/honey/skills/triage/SKILL.md', 'label every incident')
+  fs.writeFileSync('/srv/hive/agents/honey/skills/aaa/SKILL.md', 'answer in one line')
+  t.is(home.systemPrompt(persona),
+    'from the file\n\n## Skill: aaa\n\nanswer in one line\n\n## Skill: triage\n\nlabel every incident',
+    'skills append in name order, so the prompt is stable across restarts')
+
+  t.alike(home.describe().skills, ['aaa', 'triage'])
+  t.absent('secretKey' in home.describe(), 'describe() never carries key material')
+})
+
+test('the keypair file is written 0600', (t) => {
+  const fs = require('bare-fs')
+  const os = require('bare-os')
+  const path = require('bare-path')
+
+  const root = path.join(os.tmpdir(), `hive-home-${Date.now()}`)
+  t.teardown(() => fs.rmSync(root, { recursive: true, force: true }))
+
+  const bot = identity('bot')
+  const home = new AgentHome({ root, name: 'honey', fs }).create()
+  home.writeSecretKey(bot.secretKeyHex)
+
+  const mode = fs.statSync(home.keypairPath).mode & 0o777
+  t.is(mode, 0o600, 'key material is not readable by anyone else on the box')
+  t.is(home.readSecretKey(), bot.secretKeyHex.toLowerCase())
+
+  // A keypair that already existed with loose permissions is tightened, which
+  // a create-only mode argument would not do.
+  fs.chmodSync(home.keypairPath, 0o644)
+  home.writeSecretKey(bot.secretKeyHex)
+  t.is(fs.statSync(home.keypairPath).mode & 0o777, 0o600)
+
+  fs.writeFileSync(home.keypairPath, 'not a key')
+  t.exception(() => home.readSecretKey(), /not a 64-character hex secret key/)
+})
+
+test('editing instruction.md changes the next turn\'s system prompt, with no restart', async (t) => {
+  const fs = require('bare-fs')
+  const os = require('bare-os')
+  const path = require('bare-path')
+
+  const h = await harness(t)
+  const alice = identity('alice')
+  const bot = identity('bot')
+
+  const root = path.join(os.tmpdir(), `hive-home-turn-${Date.now()}`)
+  t.teardown(() => fs.rmSync(root, { recursive: true, force: true }))
+
+  const home = new AgentHome({ root, name: 'honey', fs }).create()
+  fs.writeFileSync(home.instructionPath, 'be terse')
+
+  const human = await h.connect(alice)
+  await human.publish(events.createChannel(alice.secretKey, { name: 'lobby', visibility: 'open' }))
+  const channelId = h.store.listChannels()[0].id
+  await human.publish(events.addMember(alice.secretKey, { channel: channelId, pubkeys: [bot.pubkey], role: 'bot' }))
+
+  const provider = new MockProvider()
+  const agent = new Agent({
+    secretKey: bot.secretKey,
+    owner: alice.pubkey,
+    persona: { slug: 'honey', display_name: 'Honey', runtime: 'mock', system_prompt: 'from the persona' },
+    provider,
+    home,
+    connection: await h.connect(bot)
+  })
+  t.teardown(() => agent.stop())
+  await agent.start()
+
+  const ask = async (content) => {
+    const replied = once(agent, 'reply')
+    await human.publish(events.message(alice.secretKey, { channel: channelId, content, mentions: [bot.pubkey] }))
+    await replied
+    return provider.calls[provider.calls.length - 1].history[0]
+  }
+
+  const first = await ask('first question')
+  t.is(first.role, 'system')
+  t.is(first.content, 'be terse', 'the file overrode the persona prompt')
+
+  // The edit an operator makes between two messages, with the process running.
+  fs.writeFileSync(home.instructionPath, 'answer only in questions')
+  fs.mkdirSync(path.join(home.skillsDir, 'triage'), { recursive: true })
+  fs.writeFileSync(path.join(home.skillsDir, 'triage', 'SKILL.md'), 'label every incident')
+
+  const second = await ask('second question')
+  t.is(second.content, 'answer only in questions\n\n## Skill: triage\n\nlabel every incident',
+    'the next turn read the file again, and picked up the new skill too')
 })
