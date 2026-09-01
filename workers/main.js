@@ -14,7 +14,15 @@ const env = require('bare-env')
 const FramedStream = require('framed-stream')
 
 const { openStore } = require('hive-store')
-const { Relay, WebSocketTransport, SwarmTransport, MediaStore, resolveBootstrap } = require('hive-relay')
+const {
+  Relay,
+  WebSocketTransport,
+  SwarmTransport,
+  ReplicationTransport,
+  MediaStore,
+  resolveBootstrap,
+  resolveReplication
+} = require('hive-relay')
 const { WorkflowEngine } = require('hive-workflow')
 const { RateLimiter } = require('hive-auth')
 const core = require('hive-core')
@@ -33,7 +41,8 @@ const [
   hostArg,
   publicUrlArg,
   webDirArg,
-  bootstrapArg
+  bootstrapArg,
+  replicateArg
 ] = Bare.argv
 
 const updates = updatesArg !== 'false'
@@ -50,6 +59,12 @@ const webDir = webDirArg === undefined || webDirArg === '' ? null : webDirArg
 // startup instead of at the first dial. `undefined` is the untouched default.
 const bootstrap = resolveBootstrap(
   bootstrapArg === undefined || bootstrapArg === '' ? {} : { bootstrap: bootstrapArg },
+  env
+)
+// null means replication is OFF, which is the default and the only behaviour a
+// deployment that never passes --replicate can get.
+const replicate = resolveReplication(
+  replicateArg === undefined || replicateArg === '' ? {} : { replicate: replicateArg },
   env
 )
 
@@ -156,6 +171,19 @@ async function main () {
     say('swarm', { link: swarmTransport.link, publicKey: swarmTransport.publicKey })
   }
 
+  // Relay-to-relay replication. Off unless asked for: with no --replicate this
+  // opens no corestore, joins no topic and leaves the event path untouched.
+  let replication = null
+  if (replicate !== null) {
+    replication = new ReplicationTransport(relay, {
+      storageDir: path.join(dir, 'replication'),
+      topic: replicate,
+      bootstrap
+    })
+    await replication.listen()
+    say('replication', { group: replicate, feed: replication.link })
+  }
+
   say('ready', {
     pubkey: relay.pubkey,
     npub: core.encodeNpub(relay.pubkey),
@@ -201,6 +229,7 @@ async function main () {
     relay.close()
     await wsTransport.close()
     if (swarmTransport !== null) await swarmTransport.close()
+    if (replication !== null) await replication.close()
     store.close()
     Bare.exit(0)
   }

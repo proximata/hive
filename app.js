@@ -30,9 +30,12 @@ class App extends ReadyResource {
     // undefined, not [], means "hyperdht's public bootstrap nodes" — see
     // resolveBootstrap in packages/hive-relay/lib/bind.js.
     this.bootstrap = opts.bootstrap ?? undefined
+    // null, not '', means relay-to-relay replication is off — the default.
+    this.replicate = opts.replicate ?? null
 
     this.url = null
     this.link = null
+    this.feed = null
     this.pubkey = null
     this.IPC = null
     this.pipe = null
@@ -56,7 +59,8 @@ class App extends ReadyResource {
       this.host,
       this.publicUrl ?? '',
       this.webDir ?? '',
-      this.bootstrap === undefined ? '' : this.bootstrap.join(',')
+      this.bootstrap === undefined ? '' : this.bootstrap.join(','),
+      this.replicate ?? ''
     ])
 
     this.pipe = new FramedStream(this.IPC)
@@ -81,6 +85,11 @@ class App extends ReadyResource {
       case 'swarm':
         this.link = message.link
         this.emit('swarm', message)
+        break
+
+      case 'replication':
+        this.feed = message.feed
+        this.emit('replication', message)
         break
 
       case 'ready':

@@ -66,7 +66,8 @@ let nextConnId = 1
  * protocol test suite can be run twice over two transports.
  */
 class Connection {
-  constructor (relay, { send, close, remote = null, url = null }) {
+  constructor (relay, opts) {
+    const { send, close, remote = null, url = null } = opts
     this.relay = relay
     this.id = 'c' + nextConnId++
     this.remote = remote
@@ -78,6 +79,10 @@ class Connection {
     this.authState = 'pending'
     this.auth = null
     this.challenge = randomChallenge()
+    // A per-connection override of the relay-wide limiter. Only the peer
+    // replication path sets it: its cap is per feed and lives at the reader,
+    // not per author at this bucket. Null means the relay's own limiter.
+    this.rateLimiter = opts.rateLimiter ?? null
     this.closed = false
     this.slowStrikes = 0
   }
@@ -203,6 +208,43 @@ class Relay extends EventEmitter {
     for (const connection of [...this.connections.values()]) connection.close('relay closing')
   }
 
+  /**
+   * Ingest an event that arrived from a peer relay rather than from a client.
+   *
+   * This is the whole point of running the SAME `_handleEvent` pipeline: a
+   * replicated event is verified, clock-checked, membership-checked and
+   * deduplicated by THIS relay against its own state, exactly as a client's
+   * would be. A peer is trusted to hand us bytes, and for nothing else.
+   *
+   * Two things differ from a client, and only two. The connection is
+   * pre-authenticated, because NIP-42 authenticates a client identity and
+   * there is no client here; and the per-pubkey limiter is bypassed, because a
+   * peer replaying history is thousands of legitimate authors at once and
+   * dropping them would leave the two stores permanently divergent. The cap on
+   * that path is per feed and lives at the reader — see transports/replication.js.
+   *
+   * Returns `{ accepted, reason }` read back off the OK frame the pipeline
+   * already produces, rather than a second return path through twelve steps.
+   */
+  async ingestFromPeer (event, opts = {}) {
+    let result = { accepted: false, reason: 'error: no response' }
+
+    const connection = new Connection(this, {
+      send: (frame) => {
+        const message = JSON.parse(frame)
+        if (message[0] === 'OK') result = { accepted: message[2] === true, reason: message[3] ?? '' }
+        return true
+      },
+      close: () => {},
+      rateLimiter: opts.rateLimiter ?? new AlwaysAllowRateLimiter()
+    })
+    connection.authState = 'authenticated'
+
+    await this._handleEvent(connection, event)
+    connection.closed = true
+    return result
+  }
+
   /** Sign an event with the relay's own key (discovery, system messages). */
   signAsRelay (template) {
     return finalizeEvent(template, this.secretKey)
@@ -257,7 +299,7 @@ class Relay extends EventEmitter {
       return connection.send(encode.ok(id, false, 'invalid: event pubkey does not match the authenticated pubkey'))
     }
 
-    if (!this.rateLimiter.allow(event.pubkey)) {
+    if (!(connection.rateLimiter ?? this.rateLimiter).allow(event.pubkey)) {
       this._audit({ action: 'RateLimitExceeded', actor: event.pubkey, metadata: {} })
       return connection.send(encode.ok(id, false, 'rate-limited: slow down'))
     }

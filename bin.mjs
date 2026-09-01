@@ -10,7 +10,7 @@ import App from './app.js'
 import pkg from './package.json' with { type: 'json' }
 import { run as runCli, commands } from 'hive-cli'
 import { parseArgs } from 'hive-cli/lib/args.js'
-import { resolveBind, resolveBootstrap } from 'hive-relay/lib/bind.js'
+import { resolveBind, resolveBootstrap, resolveReplication } from 'hive-relay/lib/bind.js'
 
 // Entry point, following the hello-pear-bare shape: parse flags, resolve a
 // storage directory, construct the App, log its lifecycle.
@@ -41,7 +41,7 @@ const USAGE = `${appName} ${pkg.version} — ${pkg.description}
 
   hive relay [--host 127.0.0.1] [--port 3000] [--public-url <origin>]
              [--storage <dir>] [--web-dir <dir>] [--no-updates] [--no-swarm]
-             [--bootstrap host:port[,host:port]]
+             [--bootstrap host:port[,host:port]] [--replicate <group>]
       Run the workspace relay: WebSocket + HTTP on --host:--port, and (unless
       --no-swarm) reachable peer-to-peer at hyper://<relay pubkey>.
       --host defaults to loopback and nothing but --host widens it: pass
@@ -54,6 +54,10 @@ const USAGE = `${appName} ${pkg.version} — ${pkg.description}
       --port 49737" on one box and point every relay at it. Note this joins a
       SEPARATE DHT, not the public one. Omitted, the public nodes are used
       exactly as before.
+      --replicate turns on relay-to-relay replication: every relay given the
+      same group name holds one hypercore of the events it accepted, and
+      merges every other relay's. Omitted — the default — nothing replicates
+      and the relay behaves exactly as a single node.
       --web-dir serves the web client from a directory. A standalone binary
       cannot carry it, so a deploy ships packages/hive-web/public (plus a
       vendor/ copy of @noble) beside the binary and points here. Omitted,
@@ -67,6 +71,19 @@ const USAGE = `${appName} ${pkg.version} — ${pkg.description}
       --relay attaches to a relay that is already running, where the scenes
       that need the relay's own store or event stream report SKIP.
 
+  hive agent run --name <name> [--home <dir>] [--relay <url>] [--create]
+                 [--persona <file.json>] [--channel <id>] [--bootstrap <list>]
+      Run one agent as a long-lived process: it watches every channel its key
+      is a member of, answers mentions, and logs what it is watching and as
+      whom. Identity and configuration come from the home directory
+      (<home>/agents/<name>/), never from a --provider flag: the persona's
+      "runtime" field decides what runs the model.
+      --create mints the home, a 0600 keypair and a mock persona on first run;
+      without it a missing home is an error, so a mistyped --name cannot
+      silently produce a second agent with a new identity.
+      --home defaults to $HIVE_HOME, else ~/.hive. HIVE_AGENT_KEY overrides the
+      keypair file, for a systemd unit that keeps no key on disk.
+
   hive <group> <subcommand> [flags]
       The agent-first CLI. Groups: channels, messages, canvas, reactions, dms,
       users, agents, feed, social, repos, workflows, upload, mem, audit, relay.
@@ -77,7 +94,8 @@ Environment:
   HIVE_RELAY_HOST HIVE_RELAY_PORT      relay bind address; flags win
   HIVE_PUBLIC_URL                      relay public origin; --public-url wins
   HIVE_WEB_DIR                         web client directory; --web-dir wins
-  HIVE_DHT_BOOTSTRAP                   DHT bootstrap list; --bootstrap wins`
+  HIVE_DHT_BOOTSTRAP                   DHT bootstrap list; --bootstrap wins
+  HIVE_REPLICATE_TOPIC                 replication group; --replicate wins`
 
 if (flags.version === true || flags.v === true) {
   console.log(pkg.version)
@@ -107,6 +125,40 @@ if ((flags.help === true || flags.h === true) && mode !== 'demo') {
 // agent harness names as an optional peer dependency. See the `#qvac-sdk`
 // import in packages/hive-agent/package.json — without it, bare-pack fails the
 // whole build over a module nobody installs.
+// ------------------------------------------------------------------ agent --
+
+// Also ahead of the CLI dispatch, and for the opposite reason to `demo`: the
+// CLI runner is request/response — it returns JSON and exits — and an agent is
+// a process that stays up. Wiring it as a `commands` entry would mean a handler
+// that never resolves and prints nothing until it does.
+if (mode === 'agent' && positional[1] === 'run') {
+  const { runAgent } = await import('hive-agent/lib/run.js')
+
+  try {
+    await runAgent({
+      name: flags.name ?? positional[2] ?? null,
+      root: flags.home ?? null,
+      url: flags.relay ?? null,
+      create: flags.create === true,
+      personaFile: flags.persona ?? null,
+      channel: flags.channel ?? null,
+      bootstrap: flags.bootstrap ?? null,
+      env
+    })
+  } catch (err) {
+    console.error(`[agent] ${err.message}`)
+    Bare.exit(1)
+  }
+
+  // Nothing below this line applies to a process that is meant to stay up, and
+  // falling through would hand `agent run` to the CLI dispatch as an unknown
+  // command. Exit is the signal handler's job.
+  await new Promise(() => {})
+} else if (mode === 'agent' && positional[1] === undefined) {
+  console.error(USAGE)
+  Bare.exit(1)
+}
+
 if (mode === 'demo') {
   const { start } = await import('./scripts/demo-tui.js')
 
@@ -150,9 +202,11 @@ const dir = storage ?? path.join(os.tmpdir(), 'hive', appName)
 
 let bind
 let bootstrap
+let replicate
 try {
   bind = resolveBind(flags, env)
   bootstrap = resolveBootstrap(flags, env)
+  replicate = resolveReplication(flags, env)
 } catch (err) {
   console.error(`[relay] ${err.message}`)
   Bare.exit(1)
@@ -170,7 +224,8 @@ const app = new App({
   publicUrl: bind.publicUrl,
   webDir: flags.webDir ?? env.HIVE_WEB_DIR ?? null,
   swarm: flags.swarm,
-  bootstrap
+  bootstrap,
+  replicate
 })
 
 // Say it once, loudly, at the moment it becomes true. A relay reachable from
@@ -187,6 +242,7 @@ app.on('listening', (m) => {
   console.log(m.url.includes(bound) ? `[relay] listening on ${m.url}` : `[relay] listening on ${m.url} (bound ${bound})`)
 })
 app.on('swarm', (m) => console.log(`[relay] reachable at ${m.link}`))
+app.on('replication', (m) => console.log(`[relay] replicating group ${m.group} as ${m.feed}`))
 app.on('ready-relay', (m) => {
   console.log(`[relay] identity ${m.npub}`)
   console.log(`[relay] storage  ${m.storage}`)

@@ -125,6 +125,31 @@ function resolveBootstrap (flags = {}, env = {}) {
   return entries
 }
 
+/**
+ * Resolve the relay-to-relay replication group from `--replicate` /
+ * `HIVE_REPLICATE_TOPIC`.
+ *
+ * Returns `null` when neither is given, and null means OFF. Replication is
+ * opt-in on purpose: an existing single-relay deployment must behave
+ * identically when the flag is absent, down to not opening a corestore.
+ *
+ * The value is a group name, not a key: every relay that should hold the same
+ * events passes the same word. It is hashed with a namespace before it reaches
+ * the DHT (transports/replication.js), so a common word is not a collision.
+ */
+function resolveReplication (flags = {}, env = {}) {
+  const raw = flags.replicate ?? env.HIVE_REPLICATE_TOPIC ?? null
+  if (raw === null) return null
+
+  const topic = one(raw, null, null, '--replicate')
+  // A bare `--replicate` parses as `true`, which `one` already rejects; this
+  // catches the rest of the ways a topic can be unusable as a group name.
+  if (!/^[A-Za-z0-9._:-]{1,64}$/.test(topic)) {
+    throw new Error(`--replicate must be a group name of 1-64 characters [A-Za-z0-9._:-], got ${JSON.stringify(topic)}`)
+  }
+  return topic
+}
+
 /** First supplied value, rejecting the shapes parseArgs produces for a flag with no argument. */
 function one (flag, fromEnv, fallback, label) {
   const value = flag ?? fromEnv ?? fallback
@@ -134,4 +159,4 @@ function one (flag, fromEnv, fallback, label) {
   return value
 }
 
-module.exports = { resolveBind, resolveBootstrap, isLoopback, DEFAULT_HOST, DEFAULT_PORT }
+module.exports = { resolveBind, resolveBootstrap, resolveReplication, isLoopback, DEFAULT_HOST, DEFAULT_PORT }

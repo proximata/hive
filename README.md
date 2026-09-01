@@ -381,6 +381,38 @@ a provider or a skill can read and write anything the operator can, home directo
 host a third-party agent on it. `hive-agent` itself still requires no filesystem: the fs adapter
 is injected, so the package keeps loading in a browser.
 
+### Running one: `hive agent run`
+
+Configuring an agent used to mean editing `scripts/demo-delegation.js`. It is now a process an
+operator starts:
+
+```sh
+hive agent run --name honey --home ~/.hive --create   # mints home + 0600 keypair + a mock persona
+hive agent run --name honey                           # every run after that
+```
+
+```
+[agent] honey — npub19huxdxuc9ayh5t5szrz04n6ra4n2fvp65aucyerl4rvlh3q9qctsvxlr6f
+[agent] home    /tmp/hive-t11-home/agents/honey
+[agent] persona honey · runtime mock · model mock-1
+[agent] relay   ws://127.0.0.1:3117
+[agent] channels so far: 0; membership replays as it arrives
+[agent] running. Ctrl-C to stop.
+[agent] watching 227cdbed-c0ea-49f6-a1a4-600e2441c454
+[agent] mention from 0ad18734… in 227cdbed-c0ea-49f6-a1a4-600e2441c454
+[agent] replied af052466… (37 chars)
+```
+
+SIGINT/SIGTERM unloads the model, closes the socket and exits 0; a second signal does not wait.
+There is **no `--provider` flag**: the persona's `runtime` field decides what runs the model
+(`providerFromPersona`, `packages/hive-agent/lib/qvac.js`), so the command takes an identity and a
+home and nothing else. Without `--create`, a missing home is an error — a mistyped `--name` must
+not silently mint a second agent and leave the first one dark. `HIVE_AGENT_KEY` overrides the
+keypair file for a unit file that keeps no key on disk.
+
+The wiring is `packages/hive-agent/lib/run.js`, which `scripts/demo-delegation.js` now calls too:
+one way to start an agent, and the demo proves it on every run.
+
 ---
 
 ## 📴 Offline: a LAN with no internet already works
@@ -434,6 +466,35 @@ boot rather than silently falling back to the public nodes.
 
 ---
 
+## 🔁 Replicating between relays
+
+Off unless asked for. Give every relay that should hold the same events the same group
+name and they find each other on a hashed Hyperswarm topic:
+
+```bash
+hive relay --replicate my-hive        # or HIVE_REPLICATE_TOPIC=my-hive
+```
+
+Each relay owns **one hypercore** of the events it accepted from clients, and tails every
+peer's core through the ordinary validate-then-store path — the same twelve steps a
+WebSocket `EVENT` takes. SQLite stays the store, not a projection, so FTS5 and every
+filter query are untouched, and a known event id costs one indexed lookup.
+
+There is no autobase and no linearization, because there is nothing to order: an event id
+is the sha256 of its serialized form, and replaceable conflicts resolve by `created_at`
+with an id tiebreak. Any merge order converges.
+
+| | |
+|---|---|
+| trusted for | bytes. Every replicated event is verified and ingest-checked by the receiving relay against **its** state |
+| inherited | volume and relevance — a signature says who wrote it, never how much of it there is. Ingest is capped per feed and **paces** rather than drops, since the feed is durable |
+| propagation | direct only: a relay does not re-append a peer's events, so an event reaches the relays connected to its origin and no further |
+| storage | unbounded — everyone ends up holding everything. Fine at three nodes; the trigger for selective replication is the first relay that wants a subset |
+| history | a relay that turns replication on later publishes only what it accepts from then on. The core is not backfilled from SQLite |
+| what it buys | convergence. Three nodes on one VM share a failure domain, so it is **not** fault tolerance |
+
+---
+
 ## 🍐 Pears: what is actually used
 
 Hive runs on **Bare**, Holepunch's runtime, and uses **HyperDHT** for one of its two
@@ -445,7 +506,7 @@ the Pears stack is not wired up:
 | Bare runtime, `bare-*` modules, `bare-build` binaries | ✅ used everywhere — this is the runtime |
 | HyperDHT (`SwarmTransport`) | ✅ used — `hyper://<relay pubkey>` is a real dial address |
 | `pear-runtime` | ⚠ loaded once as the OTA updater (`workers/main.js:170`), against the placeholder key in `package.json:16` — so the updater disables itself and says so |
-| `corestore`, `hyperswarm` | ❌ declared in `package.json`, **zero imports in-tree** |
+| `corestore`, `hyperswarm` (`ReplicationTransport`) | ✅ used — one hypercore per relay, merged on ingest, opt-in behind `--replicate` |
 | `pear stage` / `pear seed` distribution | ❌ never run |
 
 What it would take to make Hive a real Pear app, rather than a Bare app that ships
