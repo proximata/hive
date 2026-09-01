@@ -81,7 +81,8 @@ Preconditions:
   → an event authored by the agent's pubkey with content
   `Acknowledged: mapper: what can you do?` (the `mock` runtime's echo). That
   event, not the log line, is the proof.
-- **Stop it.** `kill -TERM <the bare pid>` → the log ends
+- **Stop it — before `verify-hive.sh cleanup`, which handles relays only and
+  leaves the agent running.** `kill -TERM $(pgrep -f "bin.mjs agent run" | tail -1)` → the log ends
   `[agent] shutting down` / `[agent] stopped`, and `pgrep -fl "agent run"`
   returns nothing.
 - **Proof.** `agent.log`, `agent-home-listing.txt`, `agent-reply.json` and the
@@ -91,10 +92,14 @@ Preconditions:
 
 - **Killing the launcher pid does not stop the agent.** The tree is
   `node scripts/bare.js → node .../bare-runtime/bin/bare → bare`. Kill the shell
-  job's pid and `pgrep -fl "agent run"` still shows two live processes; the
-  signal never reaches the agent's SIGTERM handler and the log shows no
-  shutdown. Find the real pid with `pgrep -f "bin.mjs agent run"` and TERM the
-  **last** one. Same hazard as the relay, same fix.
+  job's pid and the rest stay live; the signal never reaches the agent's SIGTERM
+  handler and the log shows no shutdown. While healthy,
+  `pgrep -f "bin.mjs agent run"` prints **three** pids, not two: the `node`
+  shim, the `node .../bare-runtime/bin/bare` wrapper, and the platform `bare`
+  binary. TERM the **last** one — verified:
+  `kill -TERM $(pgrep -f "bin.mjs agent run" | tail -1)` → `[agent] shutting
+  down` / `[agent] stopped`, and all three pids disappear. Same hazard as the
+  relay, same fix.
 - **`--relay` wants a WebSocket URL.** An `http://` URL is rewritten to `ws://`
   for you, but `HIVE_RELAY_URL` is only a fallback — the default is
   `ws://127.0.0.1:3000`, which is *not* the verification port. Pass `--relay`

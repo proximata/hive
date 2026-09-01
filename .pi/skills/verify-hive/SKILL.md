@@ -49,6 +49,20 @@ export HIVE_VERIFY_RUN="${TMPDIR:-/tmp}/verify-hive/$(date +%Y%m%d-%H%M%S)"
 .pi/skills/verify-hive/verify-hive.sh launch a 3737
 ```
 
+**`HIVE_VERIFY_RUN` does not survive a new shell, and re-minting it orphans the
+relay.** Every `launch`/`doctor`/`cleanup` must see the SAME value. If your
+commands run one per shell (an agent harness does), re-attach to the existing
+run instead of exporting a new timestamp:
+
+```sh
+export HIVE_VERIFY_RUN=$(ls -dt "${TMPDIR:-/tmp}"/verify-hive/*/ | head -1)
+```
+
+The unset-variable error the script prints suggests a *fresh* timestamp. That is
+the right advice only before the first `launch`. After it, a fresh dir means
+`doctor` reports "nothing was launched here", `launch` REFUSEs the port, and
+`cleanup` can never find the relay it must kill.
+
 Arguments are `<label> <port>`. It:
 
 1. refuses if anything is already listening on the port;
@@ -110,12 +124,14 @@ One read-only command. Run it first whenever anything looks off.
 It answers "is this instance worth driving?" with four checks and exit 0/1:
 
 ```
-✓ launcher pid 49644 alive
-✓ listener pid 49650 is the one this run started
+✓ launcher pid 54886 alive
+✓ listener pid 54892 is the one this run started
 ✓ http://127.0.0.1:3737/health ready — {"status":"ready","store":"ok","connections":0}
-✓ identity matches the relay this run started (f9b71ed9...)
+✓ identity matches the relay this run started (aaa901ac6597b4cfad50c077796e570df5f95ce67b28b058e3f369263c7d8acf)
 doctor: relay-a is worth driving
 ```
+
+The identity line prints the **full 64-hex** pubkey, not a truncation.
 
 The two failures it exists to separate:
 
@@ -181,10 +197,20 @@ Per-feature recipes: [`features/README.md`](./features/README.md).
 |---|---|---|
 | unit + protocol suite | `npm test` | 268 assertions, in-process |
 | TUI demo, asserted | `npm run demo:tui -- --demo` | 16 scenes, boots its own relay |
-| consumer-skill check | `./skill/check.sh http://127.0.0.1:3737` | the documented agent path — **default target is the PUBLIC relay, always pass a URL** |
+| consumer-skill check | `./skill/check.sh http://127.0.0.1:3737` | the documented agent path — **it WRITES (profile, channel, messages). With no URL it writes to the PUBLIC relay. Always pass a URL** |
 | two-agent handshake | `sh scripts/check-remote.sh http://127.0.0.1:3737 <uuid>` | two keys join a channel and read each other — **same default-target warning** |
 | NIP-98 header minter | `node scripts/bare.js scripts/nip98-header.js <url> <method> <hex-sk>` | signing a curl |
 | signed raw query | `node scripts/bare.js scripts/query-remote.js <url> <hex-sk> '<filters>'` | NIP-01 filters over HTTP |
+
+`skill/check.sh` is not a clean pass against a local relay and never will be.
+Against a fresh relay on 3737 it prints `14 passed, 4 failed`: three of those
+four are hosted-artifact checks that only make sense against a deployed host
+(`GET /skill.md`, `hosted skill.md has DRIFTED`, `hosted skill does not mention
+<your url>`), and the fourth is `channels list -> a UUID-shaped channel` on an
+empty store. Against the public default it prints `26 passed, 1 failed` (the
+known hosted drift) — and gets there by publishing a profile, a channel and
+messages to the live instance. Verified both ways. Treat the public invocation
+as a write, because it is.
 
 Only three files ship with this skill, because nothing covered them:
 `verify-hive.sh` (launch/doctor/cleanup), `ws-probe.js` (the WebSocket path,
@@ -225,6 +251,16 @@ port is free and deletes the storage directory.
 ✓ relay-a stopped, port 3737 free
 ✓ relay-b stopped, port 3738 free
 evidence kept at .../verify-hive/20260901-…/evidence
+```
+
+**Cleanup only knows about relays.** It walks `$HIVE_VERIFY_RUN/relay-*` and
+nothing else, so a `hive agent run` started during the drive SURVIVES it, still
+connected to a relay that no longer exists. Stop the agent first, by the pid
+from `pgrep -f "bin.mjs agent run"` (see
+[agent-harness](./features/agent-harness.md)), then run cleanup, then confirm:
+
+```sh
+pgrep -fl "bin.mjs agent run" || echo "(no agent procs)"
 ```
 
 Why the recorded listener pid matters: the tree is

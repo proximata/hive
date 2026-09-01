@@ -37,9 +37,12 @@ Preconditions:
   `curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' "$HIVE_RELAY_URL/media/45adfcb7…"`
   → `200 application/octet-stream`, and `curl -sS <url>` prints `hello map`.
   That round trip is the proof: the bytes survived and no header was needed.
-- **Check it landed on disk.** The blob is under
-  `$HIVE_VERIFY_RUN/relay-a/storage/media/`, which cleanup deletes with the
-  storage dir.
+- **Check it landed on disk.** The blob is **sharded by the first two byte
+  pairs of its hash**, not flat: for `45adfcb7…` it is at
+  `$HIVE_VERIFY_RUN/relay-a/storage/media/45/ad/45adfcb7…`. `ls storage/media`
+  shows only a `45/` directory — that is not a missing file. Use
+  `find "$HIVE_VERIFY_RUN/relay-a/storage" -path '*media*'`. Cleanup deletes it
+  with the storage dir, so read it before cleanup.
 - **Bad path.** `hive upload file --path /tmp/does-not-exist` → exit 1,
   `{"error":"user","message":"cannot read /tmp/does-not-exist: …"}`.
 - **Proof.** `upload.json` plus the fetched bytes and their sha256 in

@@ -20,8 +20,15 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
 if [ -z "${HIVE_VERIFY_RUN:-}" ]; then
-  echo "HIVE_VERIFY_RUN is not set. Run:" >&2
-  echo '  export HIVE_VERIFY_RUN="${TMPDIR:-/tmp}/verify-hive/$(date +%Y%m%d-%H%M%S)"' >&2
+  echo "HIVE_VERIFY_RUN is not set." >&2
+  echo "  starting a NEW run:" >&2
+  echo '    export HIVE_VERIFY_RUN="${TMPDIR:-/tmp}/verify-hive/$(date +%Y%m%d-%H%M%S)"' >&2
+  # A new timestamp for an EXISTING run orphans its relay: doctor says nothing
+  # was launched here, launch REFUSEs the port, cleanup never finds the pid.
+  echo "  re-attaching to the run already in progress (doctor/cleanup ALWAYS want this):" >&2
+  echo '    export HIVE_VERIFY_RUN=$(ls -dt "${TMPDIR:-/tmp}"/verify-hive/*/ | head -1)' >&2
+  latest="$(ls -dt "${TMPDIR:-/tmp}"/verify-hive/*/ 2>/dev/null | head -1)"
+  [ -n "$latest" ] && echo "  most recent run on this machine: $latest" >&2
   exit 2
 fi
 RUN="$HIVE_VERIFY_RUN"
