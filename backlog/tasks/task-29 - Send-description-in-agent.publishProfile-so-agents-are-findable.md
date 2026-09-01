@@ -1,9 +1,10 @@
 ---
 id: TASK-29
 title: Send description in agent.publishProfile so agents are findable
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 06:31'
+updated_date: '2026-09-01 05:40'
 labels:
   - agents
 dependencies: []

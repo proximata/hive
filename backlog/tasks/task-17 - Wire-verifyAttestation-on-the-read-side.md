@@ -1,9 +1,10 @@
 ---
 id: TASK-17
 title: Wire verifyAttestation on the read side
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 00:37'
+updated_date: '2026-09-01 05:40'
 labels:
   - agents
   - security
