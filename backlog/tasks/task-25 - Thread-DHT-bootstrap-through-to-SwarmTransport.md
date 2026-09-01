@@ -1,9 +1,10 @@
 ---
 id: TASK-25
 title: Thread DHT bootstrap through to SwarmTransport
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 05:17'
+updated_date: '2026-09-01 05:35'
 labels:
   - relay
   - transport

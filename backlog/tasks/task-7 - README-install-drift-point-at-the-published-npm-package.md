@@ -1,9 +1,10 @@
 ---
 id: TASK-7
 title: 'README install drift: point at the published npm package'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-08-30 00:37'
+updated_date: '2026-09-01 05:35'
 labels:
   - docs
 dependencies: []
