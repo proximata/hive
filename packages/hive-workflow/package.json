@@ -9,7 +9,7 @@
     "lib"
   ],
   "dependencies": {
-    "bare-events": "^2.5.4",
+    "bare-events": "^2.9.2",
     "hive-core": "^0.1.0",
     "js-yaml": "^5.4.0"
   }
