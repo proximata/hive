@@ -656,11 +656,20 @@ const commands = {
 /**
  * Normalize a kind-10100 event into the record the agent verbs print.
  *
- * `owner` is a SELF-SIGNED claim: the agent names a human, and nothing checks
- * the human agreed — hive-core/lib/attestation.js `verifyAttestation` has no
- * non-test caller. So the field is named `ownerClaimed` and travels next to
- * `ownerVerified: false`, in the JSON shape itself, because a consuming agent
- * reads the shape and not this comment.
+ * Ownership is THREE states, never two, and they are carried in the shape
+ * itself because a consuming agent reads the shape and not this comment:
+ *
+ *   ownership: 'verified' — the profile carries a NIP-OA `auth` tag the owner
+ *     signed over this agent's key. Only then is a bare `owner` field present.
+ *   ownership: 'claimed'  — content.owner names a human who never signed
+ *     anything. Reported as `ownerClaimed` only; there is no `owner` field to
+ *     misread, and `ownerVerified` is false.
+ *   ownership: 'none'     — nobody claimed, or the profile owns itself, which
+ *     is what the harness writes when no owner was configured.
+ *
+ * An unverifiable claim is DOWNGRADED, never rejected: a signature proves
+ * authorship, not authorisation, and dropping unattested profiles would erase
+ * every agent that simply never minted an attestation.
  */
 function agentRecord (event) {
   let content = {}
@@ -671,8 +680,6 @@ function agentRecord (event) {
     // A profile with unparseable content is still a declaration of machine-hood.
   }
 
-  const owner = typeof content.owner === 'string' ? content.owner : null
-
   return {
     pubkey: event.pubkey,
     persona: strOrNull(content.persona),
@@ -680,13 +687,27 @@ function agentRecord (event) {
     runtime: strOrNull(content.runtime),
     capabilities: strings(content.capabilities),
     models: strings(content.models),
-    // Self-owned is the same as unowned: it is what the harness writes when no
-    // owner was configured, and reporting it would invent a relationship.
-    ownerClaimed: owner === event.pubkey ? null : owner,
-    ownerVerified: false,
+    ...ownershipOf(event, content),
     eventId: event.id,
     updatedAt: event.created_at
   }
+}
+
+/** The three ownership states, decided by the signature and nothing else. */
+function ownershipOf (event, content) {
+  const raw = typeof content.owner === 'string' ? content.owner : null
+  // Self-owned is the same as unowned: reporting it would invent a relationship.
+  const claimed = raw === event.pubkey ? null : raw
+
+  const attested = core.verifyAttestation(event)
+  // A valid attestation for a DIFFERENT key than the profile claims proves
+  // nothing about the claim, so the claim stays unverified.
+  if (attested.ok && (claimed === null || attested.owner === claimed)) {
+    return { ownership: 'verified', owner: attested.owner, ownerClaimed: attested.owner, ownerVerified: true }
+  }
+
+  if (claimed === null) return { ownership: 'none', ownerClaimed: null, ownerVerified: false }
+  return { ownership: 'claimed', ownerClaimed: claimed, ownerVerified: false }
 }
 
 function strOrNull (value) {

@@ -6,6 +6,7 @@ const core = require('hive-core')
 const { openStore } = require('hive-store')
 const { Relay, WebSocketTransport, MediaStore } = require('hive-relay')
 const { run } = require('hive-cli')
+const { RelayClient } = require('hive-cli/lib/client')
 
 const { identity } = require('./helpers')
 
@@ -427,6 +428,12 @@ async function seedAgents (h) {
   return { bot, scribe, human }
 }
 
+/** Publish a pre-signed event the CLI has no verb for (an attested profile). */
+async function publish (h, who, event) {
+  const client = new RelayClient({ url: h.url, secretKey: who.secretKey })
+  await client.publish(event)
+}
+
 test('agents list returns declared machines only', async (t) => {
   const h = await harness(t)
   const alice = identity('alice')
@@ -450,12 +457,56 @@ test('agents list returns declared machines only', async (t) => {
 test('an owner is reported as a claim, never as a verified fact', async (t) => {
   const h = await harness(t)
   const alice = identity('alice')
-  const { bot, human } = await seedAgents(h)
+  const { bot, scribe, human } = await seedAgents(h)
 
   const got = await h.cli(alice, ['agents', 'get', '--pubkey', bot.pubkey])
+  t.is(got.out.ownership, 'claimed')
   t.is(got.out.ownerClaimed, human.pubkey)
   t.is(got.out.ownerVerified, false, 'nothing verifies the owner consented')
   t.absent('owner' in got.out, 'no bare `owner` field a caller could read as fact')
+
+  const self = await h.cli(alice, ['agents', 'get', '--pubkey', scribe.pubkey])
+  t.is(self.out.ownership, 'none', 'self-owned is not a relationship')
+  t.is(self.out.ownerClaimed, null)
+})
+
+test('an attested owner reads as verified, a forged one never does', async (t) => {
+  const h = await harness(t)
+  const alice = identity('alice')
+  const owner = identity('owner')
+  const good = identity('good')
+  const forger = identity('forger')
+
+  const profile = (who, ownerPubkey, tags = []) => core.finalizeEvent({
+    kind: core.KIND_AGENT_PROFILE,
+    tags: [['p', ownerPubkey], ...tags],
+    content: JSON.stringify({ owner: ownerPubkey, persona: 'p' })
+  }, who.secretKey)
+
+  const auth = (agentPubkey) => core.createAttestation({
+    ownerSecretKey: owner.secretKey,
+    ownerPubkey: owner.pubkey,
+    agentPubkey
+  })
+
+  await publish(h, good, profile(good, owner.pubkey, [auth(good.pubkey)]))
+  // The forger claims the same owner and replays the attestation minted for
+  // someone else's key: the signature is over `good`, so it proves nothing here.
+  await publish(h, forger, profile(forger, owner.pubkey, [auth(good.pubkey)]))
+
+  const verified = await h.cli(alice, ['agents', 'get', '--pubkey', good.pubkey])
+  t.is(verified.out.ownership, 'verified')
+  t.is(verified.out.owner, owner.pubkey, 'a bare `owner` field appears only when proven')
+  t.is(verified.out.ownerVerified, true)
+
+  const forged = await h.cli(alice, ['agents', 'get', '--pubkey', forger.pubkey])
+  t.is(forged.out.ownership, 'claimed', 'a stolen attestation does not verify the claim')
+  t.is(forged.out.ownerVerified, false)
+  t.absent('owner' in forged.out, 'no field a consuming agent could read as proof')
+
+  // Downgraded, never dropped: the unverifiable agent is still discoverable.
+  const all = await h.cli(alice, ['agents', 'list'])
+  t.ok(all.out.some((a) => a.pubkey === forger.pubkey), 'an unattested agent stays visible')
 })
 
 test('the 10100 description is optional and bounded', async (t) => {

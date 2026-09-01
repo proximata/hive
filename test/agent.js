@@ -117,6 +117,20 @@ test('malformed attestations are rejected', (t) => {
   }
 })
 
+test('the web client mirrors the attestation preimage exactly', (t) => {
+  // packages/hive-web/public/app.js re-implements the verification, because a
+  // client that asks the server whether the owner's signature is valid has
+  // verified nothing. There is no build step to share the code, so the one
+  // thing that must not drift - the signing preimage - is asserted here.
+  const fs = require('bare-fs')
+  const path = require('bare-path')
+  const app = fs.readFileSync(
+    path.join(__dirname, '..', 'packages', 'hive-web', 'public', 'app.js'), 'utf8')
+
+  t.ok(app.includes(`sha256(utf8('${core.DOMAIN}' + event.pubkey + ':' + conditions))`),
+    'the browser hashes the same preimage hive-core signs')
+})
+
 test('attestation conditions are enforced and unknown ones fail closed', (t) => {
   const owner = identity('owner')
   const agent = identity('agent')

@@ -194,18 +194,25 @@ function nameFor (pubkey) {
 const isAgent = (pubkey) => state.profiles.get(pubkey)?.agent === true
 
 /**
- * `[agent]`, or `[agent · alice]` when the kind-10100 profile names an owner.
+ * `[agent]`, `[agent · alice]`, or `[agent · alice?]`.
  *
  * Whose agent this is, is protocol data — not a UI convention — so it is read
- * back off the log rather than configured here.
+ * back off the log rather than configured here. Three states, matching the
+ * CLI's `ownership` field exactly:
  *
- * ⚠ It is a CLAIM, not a proof. The profile is signed by the agent, so the
- * agent asserts its own owner; nothing on the relay verifies the NIP-OA
- * attestation that would bind the two keys. Do not read this as authorisation.
+ *   verified — the profile carries a NIP-OA attestation the owner signed.
+ *   claimed  — the agent asserted an owner and nothing binds the two keys. The
+ *              trailing `?` is the only thing separating a claim from a proof,
+ *              so it is not decoration.
+ *   none     — no owner, or self-owned.
  */
 function agentLabel (pubkey) {
-  const owner = state.profiles.get(pubkey)?.owner ?? null
-  return owner === null ? ' [agent]' : ` [agent · ${nameFor(owner)}]`
+  const profile = state.profiles.get(pubkey)
+  const owner = profile?.owner ?? null
+  if (owner === null) return ' [agent]'
+  return profile?.ownerVerified === true
+    ? ` [agent · ${nameFor(owner)}]`
+    : ` [agent · ${nameFor(owner)}?]`
 }
 
 // ------------------------------------------------------------- messaging --
@@ -424,14 +431,49 @@ async function loadAgents () {
     } catch {
       persona = null // an agent profile with unparseable content is still an agent
     }
+
+    // A claim the owner never signed is DOWNGRADED, never dropped: unattested
+    // agents stay visible, they just do not get to look owned.
+    const attested = attestedOwner(event)
+    const ownerVerified = attested !== null && (owner === null || attested === owner)
+    if (ownerVerified) owner = attested
+
     const existing = state.profiles.get(event.pubkey)
-    state.profiles.set(event.pubkey, { name: existing?.name || persona || short(event.pubkey), agent: true, owner })
+    state.profiles.set(event.pubkey, { name: existing?.name || persona || short(event.pubkey), agent: true, owner, ownerVerified })
     if (owner !== null) owners.push(owner)
   }
 
   // The owner's own kind-0 has to be resolved now, or the very first agent line
   // painted would read `[agent · 4b06e74d]` and only settle later.
   if (owners.length > 0) await ensureProfiles(owners)
+}
+
+/**
+ * The owner pubkey a NIP-OA `auth` tag proves, or null.
+ *
+ * Verified here rather than taken from the relay: the whole point of the tag is
+ * that it is the owner's signature, so a client that asks the server whether it
+ * is valid has verified nothing. Mirrors hive-core/lib/attestation.js.
+ *
+ * ponytail: condition clauses are not evaluated — a conditioned attestation
+ * simply reads as unverified. Fail-closed is the safe direction for a display
+ * decision, and nothing in this repo mints conditions yet. Upgrade path: port
+ * `checkConditions` when something does.
+ */
+function attestedOwner (event) {
+  const tags = event.tags.filter((tag) => tag[0] === 'auth')
+  if (tags.length !== 1 || tags[0].length !== 4) return null
+
+  const [, owner, conditions, sig] = tags[0]
+  if (conditions !== '') return null
+  if (!/^[0-9a-f]{64}$/.test(owner) || !/^[0-9a-f]{128}$/.test(sig)) return null
+
+  const hash = sha256(utf8('nostr:agent-auth:' + event.pubkey + ':' + conditions))
+  try {
+    return schnorr.verify(hexToBytes(sig), hash, hexToBytes(owner)) ? owner : null
+  } catch {
+    return null
+  }
 }
 
 async function ensureProfiles (pubkeys) {
