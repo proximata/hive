@@ -821,3 +821,69 @@ test('editing instruction.md changes the next turn\'s system prompt, with no res
   t.is(second.content, 'answer only in questions\n\n## Skill: triage\n\nlabel every incident',
     'the next turn read the file again, and picked up the new skill too')
 })
+
+// -------------------------------------------------------------------- run --
+
+test('hive agent run starts an agent from a home directory and stops cleanly', async (t) => {
+  const fs = require('bare-fs')
+  const os = require('bare-os')
+  const path = require('bare-path')
+  const { runAgent, resolveAgent } = require('hive-agent/lib/run.js')
+
+  const h = await harness(t)
+  const alice = identity('alice')
+
+  const root = path.join(os.tmpdir(), `hive-run-${Date.now()}`)
+  t.teardown(() => fs.rmSync(root, { recursive: true, force: true }))
+
+  // A mistyped --name must not quietly mint a second identity and leave the
+  // real agent dark, so a missing home is an error carrying its own fix.
+  t.exception(() => resolveAgent({ root, name: 'honey' }), /--create/)
+
+  const lines = []
+  const handle = await runAgent({
+    root,
+    name: 'honey',
+    create: true,
+    url: `ws://127.0.0.1:${h.port}`,
+    signals: false,
+    log: (line) => lines.push(line)
+  })
+  t.teardown(() => handle.stop())
+
+  t.is(fs.statSync(handle.home.keypairPath).mode & 0o777, 0o600, '--create minted a 0600 keypair')
+  t.alike(handle.home.readMetadata().persona.runtime, 'mock', 'a first run needs no model')
+
+  const banner = lines.join('\n')
+  t.ok(banner.includes(core.encodeNpub(handle.pubkey)), 'the output says as whom')
+  t.ok(banner.includes(`ws://127.0.0.1:${h.port}`), 'and against which relay')
+  t.ok(banner.includes(handle.home.dir), 'and out of which home')
+  t.absent(banner.includes(handle.home.readSecretKey()), 'and never the secret key')
+
+  // The operator adds the printed key to a channel; the process picks it up
+  // without a restart, which is the whole reason it is long-lived.
+  const human = await h.connect(alice)
+  await human.publish(events.createChannel(alice.secretKey, { name: 'ops', visibility: 'open' }))
+  const channelId = h.store.listChannels()[0].id
+  const joined = once(handle.agent, 'joined')
+  await human.publish(events.addMember(alice.secretKey, {
+    channel: channelId, pubkeys: [handle.pubkey], role: 'bot'
+  }))
+  await joined
+
+  const replied = once(handle.agent, 'reply')
+  await human.publish(events.message(alice.secretKey, {
+    channel: channelId, content: 'are you up?', mentions: [handle.pubkey]
+  }))
+  const [reply] = await replied
+  t.is(reply.pubkey, handle.pubkey, 'the process answered a mention')
+
+  await handle.stop()
+  t.is(handle.agent.connection.closed, true, 'shutdown closed the relay socket')
+  await handle.stop() // idempotent: a second signal must not throw
+})
+
+test('an agent run refuses a name that would escape the home root', (t) => {
+  const { resolveAgent } = require('hive-agent/lib/run.js')
+  t.exception(() => resolveAgent({ root: '/tmp/hive-run-none', name: '../../etc' }), /invalid agent name/)
+})

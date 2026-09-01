@@ -71,7 +71,10 @@
 
 const core = require('hive-core')
 const { events } = require('hive-sdk')
-const { Agent, ScriptedProvider, MockProvider, RelayConnection } = require('hive-agent')
+const { ScriptedProvider, MockProvider } = require('hive-agent')
+// The wiring this script used to own. Extracted so `hive agent run` and this
+// demo start an agent exactly one way; see packages/hive-agent/lib/run.js.
+const { startAgent: wireAgent } = require('hive-agent/lib/run.js')
 const { TestClient } = require('../test/client')
 const { CH, AGENT_OWNERS, channelId, identity } = require('./lib/demo/web-identities')
 
@@ -314,10 +317,7 @@ async function setupChannel () {
  * failure this whole script exists to make impossible.
  */
 async function startAgent (who, { owner, routes, relay, maxHops }) {
-  const connection = new RelayConnection({ url: relay.url, secretKey: who.secretKey, reconnect: false })
-  await connection.connect()
-
-  const agent = new Agent({
+  const agent = await wireAgent({
     secretKey: who.secretKey,
     owner: owner.pubkey,
     persona: { slug: who.name, display_name: who.name, runtime: 'scripted' },
@@ -326,22 +326,12 @@ async function startAgent (who, { owner, routes, relay, maxHops }) {
     provider: routes === null
       ? new MockProvider()
       : new ScriptedProvider({ name: who.name, routes, chunkDelay: PACE > 0 ? CHUNK : 0 }),
-    connection,
-    maxHops
+    url: relay.url,
+    reconnect: false,
+    maxHops,
+    channel: CHANNEL,
+    onError: (err) => console.error(`  [${who.name}] ${err.message}`)
   })
-
-  agent.on('error', (err) => console.error(`  [${who.name}] ${err.message}`))
-  agent.on('turn-error', (err) => console.error(`  [${who.name}] turn failed: ${err.message}`))
-  await agent.start()
-
-  if (!agent.channels.has(CHANNEL)) {
-    await once(agent, 'joined').catch(() => {
-      // The membership notification is community-global and replayed on
-      // subscribe, so missing it means the add never landed. Say so loudly.
-      throw new Error(`${who.name} never joined ${CHANNEL}: it is not a member`)
-    })
-  }
-  if (!agent.channels.has(CHANNEL)) throw new Error(`${who.name} joined some channel, but not ${CHANNEL}`)
 
   log(`  [${who.name}] watching ${CHANNEL}, owned by ${owner.name}`)
   return agent
@@ -494,17 +484,17 @@ async function runLoopGuard (relay, maxHops = flag('hops', 4)) {
   }
 
   const start = async (who) => {
-    const connection = new RelayConnection({ url: relay.url, secretKey: who.secretKey, reconnect: false })
-    await connection.connect()
-    const agent = new Agent({
+    // No `channel:` here on purpose: this room is created after the agents
+    // start and a missed notification is tolerated below, not fatal.
+    const agent = await wireAgent({
       secretKey: who.secretKey,
       owner: alice.pubkey,
       provider: new MockProvider(),
-      connection,
-      maxHops
+      url: relay.url,
+      reconnect: false,
+      maxHops,
+      onError: () => {}
     })
-    agent.on('error', () => {})
-    await agent.start()
     if (!agent.channels.has(room)) await once(agent, 'joined').catch(() => {})
     agent.watch(room) // idempotent; belt and braces against a missed notification
     return agent
