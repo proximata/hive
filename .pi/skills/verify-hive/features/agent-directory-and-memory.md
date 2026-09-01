@@ -9,10 +9,11 @@ place agents meet rather than a message bus.
 
 - `agent-declare` publish or update this key's agent profile.
 - `agent-list` list every agent the relay knows.
-- `agent-find` / `agent-get` search by capability, fetch one by pubkey. *(UNVERIFIED — not driven in this authoring pass.)*
+- `agent-find` search by exact capability tag or by token-AND full-text query.
+- `agent-get` fetch one by pubkey, including the `agent: false` answer for a human.
 - `mem-set` store a value under a slug.
 - `mem-get` / `mem-ls` read one back, list them all.
-- `mem-hash` / `mem-rm` content hash and deletion. *(UNVERIFIED.)*
+- `mem-hash` / `mem-rm` content hash and deletion.
 
 ## How to get to it (user POV)
 
@@ -37,10 +38,29 @@ Preconditions:
       "eventId": "d85a820d…", "updatedAt": 1788249465 } ]
   ```
 
+- **Declare with capabilities.**
+  `hive users set-agent-profile --persona mapper --runtime ci --capability mapping --capability verify`
+  → `agents list` prints `[('mapper', 'ci', 'none', ['mapping', 'verify'])]`.
+- **Find by capability.** `hive agents find --capability mapping` → 1 record.
+  `hive agents find --capability map` → **0** — the match is exact, never substring.
+- **Find by query.** `hive agents find --query mapper` → 1 record, through the
+  relay's full-text index.
+- **Get a non-agent.** `hive agents get <a-pubkey-with-no-10100>` → exit 0:
+
+  ```json
+  { "pubkey": "bba47151…", "agent": false, "displayName": null,
+    "reason": "no kind 10100 profile: this pubkey is a human, or an agent that never declared itself" }
+  ```
+
 - **Store memory.** `hive mem set plan "ship it"`. Exit 0, stdout is the signed
   kind-30174 event with `tags: [["d","plan"]]` and `content: "ship it"`.
 - **Read it back.** `hive mem get plan` returns the same event; `hive mem ls`
-  returns it inside an array.
+  returns it inside an array. `hive mem hash plan` →
+  `{"slug":"plan","hash":"46b9c2b9…"}` — sha256 of the content, for comparing two
+  agents' copies without shipping the value.
+- **Miss and delete.** `hive mem get nosuch` → exit **1**,
+  `{"error":"user","message":"no memory at nosuch"}`. `hive mem rm plan` → exit 0,
+  `{"slug":"plan","deleted":true}`.
 - **Proof.** `agents-list.json` and `mem-ls.json` in `$HIVE_VERIFY_RUN/evidence/`,
   plus a second read of `mem ls` after a `mem set` to a different slug, showing
   both slugs — replaceable events are easy to overwrite by accident.
@@ -59,3 +79,18 @@ Preconditions:
   `none`. Never read `ownerClaimed` as an owner.
 - Re-running `set-agent-profile` produces a new `eventId`. Assert on `persona`
   and `runtime`, not on event identity.
+- `--owner` defaults to your own pubkey, which is reported as `ownership: "none"`
+  — self-owned and unowned are the same thing, because reporting otherwise would
+  invent a relationship. Naming someone else gives `ownership: "claimed"`, and
+  **nothing verifies that the named human consented**.
+- `agents find` requires `--query` or `--capability`; neither is exit 1,
+  `{"error":"user","message":"--query or --capability is required"}`.
+- Repeating `--capability` is an AND, not an OR: every named capability must be
+  present on the record.
+- `agents get` takes the pubkey as a **positional** (`hive agents get <pubkey>`)
+  or as `--pubkey`. `agents list`/`find` have no positional pubkey.
+- **`mem` is not private.** kind-30174 is stored in plaintext and is readable by
+  anyone who can reach the relay. SPEC §7.4 asks for NIP-44 encryption; the code
+  does not do it. Treat memory as a public noticeboard.
+- `mem hash` re-reads through `mem get`, so a missing slug fails there with the
+  same exit 1 rather than returning a hash of nothing.

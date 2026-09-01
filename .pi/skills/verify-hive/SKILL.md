@@ -186,9 +186,11 @@ Per-feature recipes: [`features/README.md`](./features/README.md).
 | NIP-98 header minter | `node scripts/bare.js scripts/nip98-header.js <url> <method> <hex-sk>` | signing a curl |
 | signed raw query | `node scripts/bare.js scripts/query-remote.js <url> <hex-sk> '<filters>'` | NIP-01 filters over HTTP |
 
-Only two files ship with this skill, because nothing covered them:
-`verify-hive.sh` (launch/doctor/cleanup) and `ws-probe.js` (the WebSocket path,
-which reuses `test/client.js` rather than reimplementing a Nostr client).
+Only three files ship with this skill, because nothing covered them:
+`verify-hive.sh` (launch/doctor/cleanup), `ws-probe.js` (the WebSocket path,
+which reuses `test/client.js` rather than reimplementing a Nostr client), and
+`sign-event.js` (an event with a chosen `kind` and `created_at`, which no CLI
+verb can produce — needed only for the relay's `created_at` cap).
 
 ## Evidence
 
@@ -250,7 +252,12 @@ Both live in this directory and are executable.
 
 # WebSocket: AUTH + one REQ + EOSE, prints {pubkey, authenticated, closed, events}
 node scripts/bare.js .pi/skills/verify-hive/ws-probe.js <port> <hex-sk> '<filter-json>'
+
+# one signed event with a chosen kind and created_at drift, on stdout as JSON
+node scripts/bare.js .pi/skills/verify-hive/sign-event.js <kind> <drift-seconds> [content]
 ```
 
-`ws-probe.js` must stay inside the checkout: a copy under `/tmp` cannot resolve
-`hive-relay` and dies on its first `require`.
+`ws-probe.js` and `sign-event.js` must stay inside the checkout: a copy under
+`/tmp` cannot resolve `hive-relay` / `hive-core` and dies on its first `require`.
+`sign-event.js` reads `HIVE_PRIVATE_KEY` from the environment, like every other
+part of the CLI.

@@ -72,8 +72,14 @@ Preconditions:
 - `/git/*` and `/huddle/*` answer **501**, deliberately, so a client can tell
   "not implemented" from "wrong URL". A 501 there is not a failure.
 - `audit list` returns the entries array only. The chain `verification` field is
-  non-null solely for the relay's own key, so from a client key it is always
-  `null` — use `hive audit verify` for the chain check, not `list`.
+  non-null solely for the relay's own key — see [audit-trail](./audit-trail.md).
 - `GET /api/audit` is rate limited. Hammering it returns 429.
+- **`curl -I` (HEAD) is not a probe.** Only `/media/*` handles HEAD; everywhere
+  else it falls past the route table into the auth gate and answers **401**.
+  `curl -I $URL/.well-known/nostr.json` → 401, while the same URL with GET → 200.
+  `HEAD /` is the exception that works, because the static server handles it.
+- An unknown path answers **401**, not 404. `curl $URL/nope.js` → 401.
+- Caps, refusals and replication have their own file:
+  [relay-limits](./relay-limits.md).
 - `/health` and `/_readiness` are the same handler; `/_liveness` is weaker and
   does not touch the store. Poll `/health`.
