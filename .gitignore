@@ -9,3 +9,6 @@ storage/
 
 # firecrawl scratch cache from research runs
 .firecrawl/
+
+# third-party skill library (canonical copy lives on the shelf)
+.pi/skills/pstack
