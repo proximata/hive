@@ -14,8 +14,10 @@ const { swarmKeyPair } = require('hive-relay/lib/transports/swarm')
 const { RateLimiter } = require('hive-auth')
 const core = require('hive-core')
 
+const { events } = require('hive-sdk')
+
 const { TestClient } = require('./client')
-const { identity, sign } = require('./helpers')
+const { identity, sign, message } = require('./helpers')
 
 // Relay-to-relay replication: one hypercore per relay, merged through the
 // ordinary ingest path. These tests run two whole relays against each other
@@ -230,6 +232,25 @@ test('re-replicating a full history inserts no duplicates and does not grow the 
   t.is(a.replication.local.length, events.length, "and A's core did not grow either")
 })
 
+test('an id we already hold is answered before the signature is checked, and still cannot overwrite it', async (t) => {
+  const b = await node(t)
+
+  const alice = identity('alice')
+  const original = sign(alice, { kind: 1, content: 'the real one' })
+  t.is((await accept(b, original)).accepted, true)
+
+  // Same id, different bytes: what an attacker would send to overwrite a
+  // stored event through the cheap path. Counted as a duplicate and discarded;
+  // the store is not touched, which is why skipping verification here is safe.
+  const impostor = { ...original, content: 'swapped after the fact' }
+  const duplicatesBefore = b.replication.stats.duplicates
+  await b.replication._ingest(b4a.from(JSON.stringify(impostor)), 'peer')
+
+  t.is(b.replication.stats.duplicates, duplicatesBefore + 1, 'recognised without verifying')
+  t.is(b.replication.stats.ingested, 0, 'and nothing was inserted')
+  t.is(b.store.getEvent(original.id).content, 'the real one', 'the stored event is untouched')
+})
+
 // ------------------------------------------------------------------- caps --
 
 test('the per-pubkey client limiter does not throttle a replicated backlog', async (t) => {
@@ -323,6 +344,57 @@ test('a peer feed is trusted for bytes and nothing else', async (t) => {
   t.ok(await waitFor(() => b.store.getEvent(good.id) !== null), 'the valid event still lands')
   t.is(b.store.getEvent(forged.id), null, 'the tampered one is rejected by B, not trusted from A')
   t.is(b.replication.stats.rejected, 2, 'one bad signature, one unparseable block')
+})
+
+// ------------------------------------------------- the product's own path --
+
+test('a channel created through the SDK gets the SAME id on both relays, so its messages replicate', async (t) => {
+  const a = await node(t)
+  const b = await node(t)
+  const stop = connect(a, b)
+  t.teardown(stop)
+
+  const alice = identity('alice')
+
+  // `events.createChannel` sends NO h tag (hive-sdk index.js), which is what
+  // the CLI and the web client both use. The relay therefore mints the id in
+  // `apply`, and it must mint it from the event rather than at random: a
+  // random one forks, and every later message is 'unknown channel' on the peer.
+  const create = events.createChannel(alice.secretKeyHex, { name: 'general' })
+  await accept(a, create)
+
+  t.ok(await waitFor(() => b.store.getEvent(create.id) !== null), 'B applied the create')
+  const channelId = a.store.listChannels()[0].id
+  t.is(b.store.listChannels()[0].id, channelId, 'one signed create event, one channel id')
+
+  const msg = message(alice, channelId, 'hello everyone')
+  t.is((await accept(a, msg)).accepted, true, 'A accepted the message')
+
+  t.ok(await waitFor(() => b.store.getEvent(msg.id) !== null), 'and B stored it in the same channel')
+  t.is(b.replication.stats.rejected, 0, 'nothing was rejected as an unknown channel')
+})
+
+test('a relay-signed kind does NOT cross: a peer relay is not this relay', async (t) => {
+  // Named because the transport's own header calls the event set a commutative
+  // CRDT, and this is the documented hole in that: relay-signed kinds carry the
+  // ORIGIN relay's pubkey, and `_validateIngest` rejects any of them not signed
+  // by the relay doing the ingesting. Membership notifications, group metadata,
+  // system messages and thread summaries stay local by construction.
+  const a = await node(t)
+  const b = await node(t)
+  const stop = connect(a, b)
+  t.teardown(stop)
+
+  const system = a.relay.signAsRelay({
+    kind: core.KIND_SYSTEM_MESSAGE,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [],
+    content: 'system'
+  })
+  t.is((await accept(a, system)).accepted, true, 'A accepts what A signed')
+
+  t.ok(await waitFor(() => b.replication.stats.rejected === 1), 'B rejected it')
+  t.is(b.store.getEvent(system.id), null, 'a peer cannot make this relay speak in its own name')
 })
 
 // ------------------------------------------------------------------ swarm --

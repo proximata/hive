@@ -17,12 +17,28 @@ const { TokenBucket } = require('hive-auth')
 // idempotent by event id, so FTS5 and every filter query are untouched.
 //
 // There is no autobase and no linearization, because there is no ordering
-// problem: an event id is the sha256 of its serialized form (hive-core
-// lib/event.js) and replaceable conflicts resolve by created_at with an id
-// tiebreak (hive-store lib/sqlite-store.js). The event set is a commutative
-// CRDT — any merge order converges — so a writer set, a quorum and an
-// authorised-writer ceremony would all be machinery for a problem Hive does
-// not have.
+// problem for ORDINARY events: an event id is the sha256 of its serialized
+// form (hive-core lib/event.js) and replaceable conflicts resolve by created_at
+// with an id tiebreak (hive-store lib/sqlite-store.js). Those merge
+// commutatively, so a writer set, a quorum and an authorised-writer ceremony
+// would all be machinery for a problem Hive does not have.
+//
+// It is NOT a CRDT everywhere, and the two exceptions are worth naming rather
+// than discovering:
+//
+//   - COMMAND KINDS have side effects, and a side effect is only commutative
+//     if it is a pure function of the signed event. Channel creation was not:
+//     it minted a random uuid, so the same create event produced a different
+//     channel id on each relay and every later message was 'unknown channel'
+//     on the peer. Fixed at handlers.js `uuidFrom`. Any NEW command handler
+//     that derives state from something other than the event — a clock, a
+//     random source, this relay's own store — reintroduces the same fork.
+//   - RELAY-SIGNED KINDS cannot cross at all. `_validateIngest` rejects them
+//     unless signed by the ingesting relay's own key, which is the rule that
+//     stops a peer forging membership on our behalf. So group metadata,
+//     membership notifications, system messages and thread summaries are
+//     per-relay and are regenerated locally by each relay's own handlers when
+//     the CLIENT-signed command that caused them replicates.
 //
 // WHAT A PEER IS TRUSTED FOR: nothing. Every replicated event is verified
 // here exactly as a client's would be, and every ingest rule (membership,
@@ -46,6 +62,11 @@ const { TokenBucket } = require('hive-auth')
 //     is not backfilled.
 //   - Three nodes on one VM share a failure domain. This buys convergence, and
 //     specifically not availability.
+//   - A rejected block is never retried. A channel message whose create event
+//     has not arrived yet — possible when the two came from DIFFERENT peer
+//     feeds, since ordering only holds within one feed — is dropped for good;
+//     the reader has no cursor to rewind. The trigger to build a retry queue
+//     is the first deployment where the same author writes to two relays.
 
 /** Bytes of one core block we are willing to parse as an event. */
 const MAX_BLOCK_BYTES = LIMITS.MAX_FRAME_BYTES
@@ -227,6 +248,23 @@ class ReplicationTransport {
     }
     if (event === null || typeof event !== 'object' || typeof event.id !== 'string') {
       this.stats.rejected++
+      return
+    }
+
+    // An id we already hold, answered BEFORE the pipeline rather than by it.
+    //
+    // A peer replays its whole feed on every reconnect, and the pipeline's own
+    // duplicate check is step 8 — after step 5 verifies the signature. Without
+    // this line a re-read of a 100k-event history schnorr-verifies 100k events
+    // to discard all of them, which is the cost the `follow()` comment claims
+    // is 'one indexed lookup and nothing else'. Now it is.
+    //
+    // Safe because an event id IS the hash of its content (hive-core
+    // lib/event.js): a block whose id we hold either carries the bytes we
+    // already validated, or carries different bytes under a stolen id, and in
+    // that case this path stores nothing at all rather than trusting it.
+    if (this.relay.store.getEvent(event.id) !== null) {
+      this.stats.duplicates++
       return
     }
 

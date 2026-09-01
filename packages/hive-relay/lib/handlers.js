@@ -73,6 +73,28 @@ function requireChannel (relay, event) {
 function uuidv4 () {
   const bytes = new Uint8Array(16)
   globalThis.crypto.getRandomValues(bytes)
+  return formatUuid(bytes)
+}
+
+/**
+ * A v4-shaped uuid derived from a string, so the SAME input always yields the
+ * SAME id — on this relay, on a peer relay, and after a restart.
+ *
+ * This exists because a channel id must be a function of the signed create
+ * event and not of whoever happened to apply it first. `events.createChannel`
+ * (hive-sdk index.js) sends no `h` tag, so before this the relay minted a
+ * random uuid in `apply`; replicate that one event to a second relay and each
+ * side invents a different id for the same channel, after which every message
+ * tagged with one relay's id is rejected by the other as `invalid: unknown
+ * channel`. The DM path already derives its id for exactly this reason — see
+ * `dmChannelId` — this makes group creation agree with it.
+ */
+function uuidFrom (seed) {
+  return formatUuid(b4a.from(sha256(b4a.from(seed))).subarray(0, 16))
+}
+
+/** 16 bytes -> the canonical 8-4-4-4-12 form, with the v4 variant bits set. */
+function formatUuid (bytes) {
   bytes[6] = (bytes[6] & 0x0f) | 0x40
   bytes[8] = (bytes[8] & 0x3f) | 0x80
 
@@ -170,7 +192,10 @@ const createGroup = {
 
   apply (relay, event) {
     const channel = relay.store.createChannel({
-      id: tagValue(event, 'h') ?? uuidv4(),
+      // Derived from the event id, never random: two relays applying the same
+      // replicated create event must reach the same channel id or every later
+      // message in that channel is 'unknown channel' on one of them.
+      id: tagValue(event, 'h') ?? uuidFrom(event.id),
       name: tagValue(event, 'name'),
       type: tagValue(event, 'channel_type') ?? 'stream',
       visibility: tagValue(event, 'visibility') ?? 'open',
@@ -665,6 +690,7 @@ module.exports = {
   publishMembershipNotification,
   RejectError,
   uuidv4,
+  uuidFrom,
   isAtLeast,
   roleOf,
   MAX_PUT_USER_TARGETS
