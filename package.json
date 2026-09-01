@@ -10,7 +10,7 @@
     "node": ">=18"
   },
   "version": "0.1.0",
-  "description": "A hive mind communication platform on the Pears stack \u2014 Nostr relay, agents, workflows",
+  "description": "A hive mind communication platform on the Bare runtime \u2014 Nostr relay, agents, workflows",
   "license": "Apache-2.0",
   "type": "commonjs",
   "upgrade": "pear://replace-with-pear-touch-output",
