@@ -9,7 +9,7 @@
     "lib"
   ],
   "dependencies": {
-    "b4a": "^1.6.7",
+    "b4a": "^1.9.0",
     "bare-sqlite": "^0.1.4",
     "hive-core": "^0.1.0"
   },

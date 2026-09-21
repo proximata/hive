@@ -11,7 +11,7 @@
   "dependencies": {
     "@noble/curves": "^2.3.0",
     "@noble/hashes": "^2.3.0",
-    "b4a": "^1.6.7",
+    "b4a": "^1.9.0",
     "bare-encoding": "^1.0.0",
     "bare-crypto": "^1.15.3"
   },
