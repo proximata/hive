@@ -9,7 +9,7 @@
     "lib"
   ],
   "dependencies": {
-    "b4a": "^1.6.7",
+    "b4a": "^1.9.0",
     "bare-events": "^2.5.4",
     "bare-fs": "^4.8.1",
     "bare-http1": "^4.5.8",
