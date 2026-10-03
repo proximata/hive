@@ -1,17 +1,15 @@
 'use strict'
 
 const EventEmitter = require('bare-events')
-const ws = require('bare-ws')
 
 const { buildAuthEvent } = require('hive-auth')
-const { protocol } = require('hive-relay')
-const { SwarmClient } = require('hive-relay/lib/transports/swarm')
+const { protocol, transports } = require('hive-relay')
 
 /**
  * A relay connection for agents: NIP-42 handshake, subscriptions, publishing,
- * and reconnect. Speaks either transport — `ws://host:port` or
- * `hyper://<relay pubkey>` — behind one API, because an agent should not care
- * how it reached its workspace.
+ * and reconnect. The transport is picked from the URL scheme through the
+ * transport registry (`ws://host:port`, `hyper://<relay DHT key>`, ...), because
+ * an agent should not care how it reached its workspace.
  */
 class RelayConnection extends EventEmitter {
   constructor ({ url, secretKey, bootstrap = null, reconnect = true }) {
@@ -22,8 +20,7 @@ class RelayConnection extends EventEmitter {
     this.bootstrap = bootstrap
     this.reconnect = reconnect
 
-    this.socket = null
-    this.swarm = null
+    this.client = null
     this.challenge = null
     this.authenticated = false
     this.closed = false
@@ -32,29 +29,18 @@ class RelayConnection extends EventEmitter {
     this.backoff = 500
   }
 
-  get isSwarm () {
-    return this.url.startsWith('hyper://')
-  }
-
   async connect () {
-    if (this.isSwarm) {
-      this.swarm = new SwarmClient({ bootstrap: this.bootstrap })
-      await this.swarm.connect(this.url, {
-        onframe: (frame) => this._onframe(frame),
-        onclose: () => this._ondisconnect()
-      })
-      this._write = (frame) => this.swarm.send(frame)
-    } else {
-      const target = new URL(this.url.replace(/^ws/, 'http'))
-      const socket = new ws.Socket({ host: target.hostname, port: Number(target.port) || 80 })
+    // One client for the life of this connection, so a transport that holds
+    // resources (a DHT node, for example) keeps them across reconnects.
+    this.client ??= transports.createClient(this.url, { bootstrap: this.bootstrap })
+    this.challenge = null
 
-      socket.on('data', (data) => this._onframe(data.toString()))
-      socket.on('close', () => this._ondisconnect())
-      socket.on('error', (err) => this._onerror(err))
-
-      this.socket = socket
-      this._write = (frame) => socket.write(frame)
-    }
+    await this.client.connect(this.url, {
+      onframe: (frame) => this._onframe(frame),
+      onclose: () => this._ondisconnect(),
+      onerror: (err) => this._onerror(err)
+    })
+    this._write = (frame) => this.client.send(frame)
 
     await this._authenticate()
 
@@ -72,7 +58,8 @@ class RelayConnection extends EventEmitter {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('timed out waiting for the NIP-42 challenge')), 15000)
 
-      this.once('challenge', () => {
+      // The challenge can arrive before this runs, so check for it first.
+      const answer = () => {
         const event = buildAuthEvent({
           challenge: this.challenge,
           relayUrl: this.url,
@@ -90,7 +77,10 @@ class RelayConnection extends EventEmitter {
         })
 
         this._write(JSON.stringify(['AUTH', event]))
-      })
+      }
+
+      if (this.challenge !== null) answer()
+      else this.once('challenge', answer)
     })
   }
 
@@ -138,8 +128,8 @@ class RelayConnection extends EventEmitter {
 
   /**
    * A relay that goes away is a disconnect, not a fault. Losing the socket is
-   * the normal end of every connection — during shutdown, on a relay restart,
-   * or when a laptop closes — and the reconnect loop already handles it.
+   * the normal end of every connection (shutdown, a relay restart, a laptop
+   * closing), and the reconnect loop already handles it.
    * Reporting it as an error would make every clean teardown look like a
    * failure, so only genuinely unexpected errors are raised.
    */
@@ -197,8 +187,7 @@ class RelayConnection extends EventEmitter {
   async close () {
     this.closed = true
     try {
-      if (this.socket !== null) this.socket.end()
-      if (this.swarm !== null) await this.swarm.close()
+      if (this.client !== null) await this.client.close()
     } catch {
       // Already gone.
     }

@@ -55,8 +55,8 @@ function json (res, status, payload) {
 }
 
 /**
- * Every HTTP endpoint authenticates with NIP-98, so an agent needs no session,
- * no cookie and no bearer token — only its key.
+ * Endpoints outside the public section above authenticate with NIP-98, so an
+ * agent needs only its key to call them.
  */
 function authenticate (relay, req, url, body) {
   const result = validateNip98(req.headers.authorization, {
@@ -166,7 +166,7 @@ function createRestRouter (relay, opts = {}) {
     }
 
     // The web client: markup, CSS, one ES module and the crypto it imports.
-    // Unauthenticated on purpose — the page has to load before the browser has
+    // Unauthenticated on purpose: the page has to load before the browser has
     // a key, and it carries nothing a reader could not get from the repo. Every
     // byte it then reads still goes through NIP-98 or NIP-42 like any other
     // client. A miss returns false and falls through to the routes below.
@@ -234,9 +234,9 @@ function createRestRouter (relay, opts = {}) {
       const payload = safeJson(body)
       const filters = Array.isArray(payload) ? payload : [payload]
       // Same cap as the WebSocket REQ path: one HTTP body must not buy
-      // thousands of table scans either. Refused outright, never truncated —
-      // a client that silently gets 20 of its 4600 filters answered is being
-      // lied to about what it queried.
+      // thousands of table scans either. Refused outright, because a client
+      // that silently gets 20 of its 4600 filters answered is being lied to
+      // about what it queried.
       if (filters.length > MAX_FILTERS_PER_REQ) {
         return json(res, 400, { error: 'invalid', message: `too many filters (max ${MAX_FILTERS_PER_REQ})` })
       }
@@ -244,7 +244,7 @@ function createRestRouter (relay, opts = {}) {
       const normalized = filters.map(normalizeFilter).filter(Boolean)
       if (normalized.length === 0) return json(res, 400, { error: 'invalid', message: 'no valid filters' })
 
-      // Global queries only — see the note in Relay._handleReq.
+      // Global queries only; see the note in Relay._handleReq.
       if (channelsFromFilters(normalized).length === 0) {
         const gate = checkPGatedAuthorization(normalized, context.pubkey)
         if (gate !== null) return json(res, 403, { error: 'restricted', message: gate })
@@ -273,8 +273,8 @@ function createRestRouter (relay, opts = {}) {
 
     // ------------------------------------------------- convenience reads --
     //
-    // Everything below is derivable from Nostr queries; these endpoints exist
-    // so the CLI can stay one round trip per command.
+    // Read-only shortcuts so the CLI needs one round trip per command. Most are
+    // derivable from Nostr queries; /api/audit and /api/relay expose relay state.
 
     if (req.method === 'GET' && path === '/api/channels') {
       return json(res, 200, relay.store.listChannels({
@@ -373,7 +373,7 @@ function createRestRouter (relay, opts = {}) {
         swarm: relay.swarmKey ?? null,
         connections: relay.connections.size,
         subscriptions: relay.subscriptions.size,
-        // For clients outside the module graph — the browser one. `kinds` is
+        // For clients outside the module graph (the browser one). `kinds` is
         // the label registry; `pGatedKinds` is the subset a global REQ may not
         // ask for, so a client can build a legal firehose filter instead of
         // guessing and getting CLOSED.

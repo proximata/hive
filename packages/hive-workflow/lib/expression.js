@@ -1,12 +1,13 @@
 'use strict'
 
-// A small expression evaluator for workflow `if:` and `filter:` conditions.
+// Expression evaluator for workflow `if:` and `filter:` conditions.
 //
-// Deliberately not `eval` or `new Function`: workflow definitions are
-// user-supplied and would otherwise be arbitrary code execution inside the
-// relay. This is a recursive-descent parser over a fixed grammar with no
-// property access, no calls beyond a fixed function table, and a wall-clock
-// budget so a pathological expression cannot stall the pipeline.
+// It does not use `eval` or `new Function`: workflow definitions are
+// user-supplied, so that would be arbitrary code execution inside the relay.
+// Instead it is a recursive-descent parser over a fixed grammar. The grammar
+// has no property access and only calls functions from a fixed table. A
+// wall-clock budget stops a pathological expression from stalling the
+// pipeline.
 
 const DEFAULT_TIMEOUT_MS = 100
 
@@ -184,8 +185,8 @@ function evaluateNode (node, context, deadline) {
       return node.value
 
     case 'variable':
-      // An unknown variable is empty, not an error: a trigger that did not set
-      // a field should make the condition false rather than fail the run.
+      // An unknown variable evaluates to an empty string, so a trigger that did
+      // not set a field makes the condition false instead of failing the run.
       return Object.prototype.hasOwnProperty.call(context, node.name) ? context[node.name] : ''
 
     case 'not':
@@ -225,7 +226,7 @@ function evaluateNode (node, context, deadline) {
 
 /**
  * Evaluate `expression` against `context`. Returns a boolean.
- * A malformed expression throws; an expression over unknown variables is false.
+ * A malformed expression throws; an unknown variable reads as an empty string.
  */
 function evaluate (expression, context = {}, { timeout = DEFAULT_TIMEOUT_MS } = {}) {
   if (expression === undefined || expression === null || expression === '') return true

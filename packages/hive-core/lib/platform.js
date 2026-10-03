@@ -1,7 +1,7 @@
 'use strict'
 
-// Bare is deliberately minimal: it ships neither the WHATWG encoding globals nor
-// the WebCrypto namespace. @noble/hashes reaches for TextEncoder at module scope
+// Bare ships without the WHATWG encoding globals and the WebCrypto namespace.
+// @noble/hashes reaches for TextEncoder at module scope
 // and crypto.getRandomValues on first key generation, so both have to exist
 // before any @noble module is required.
 //

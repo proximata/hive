@@ -52,7 +52,7 @@ RestartSec=2
 
 # systemd creates and owns /var/lib/hive, which is also what makes DynamicUser
 # workable: the uid changes between boots, the directory's ownership follows.
-# relay.key lives here and is the relay's dial address — losing it breaks every
+# relay.key lives here and is the relay's dial address. Losing it breaks every
 # peer's hyper:// link, so this directory is the thing to back up.
 DynamicUser=yes
 StateDirectory=hive
@@ -67,7 +67,7 @@ PrivateTmp=yes
 PrivateDevices=yes
 # AF_NETLINK is not optional when the swarm is on: hyperDHT enumerates local
 # interfaces through a netlink socket, and without it the worker dies during
-# startup — after "BOUND TO" is printed and before anything listens, with exit
+# startup, after "BOUND TO" is printed and before anything listens, with exit
 # status 0. Measured on this exact unit; adding AF_NETLINK was the whole fix.
 # It can be dropped only together with --no-swarm.
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK

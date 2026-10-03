@@ -74,7 +74,7 @@ function escapeLike (value) {
 }
 
 /**
- * Full SELECT for one filter. Ordering is `created_at DESC, id ASC` — the id
+ * Full SELECT for one filter. Ordering is `created_at DESC, id ASC`. The id
  * tiebreak keeps pagination stable when many events share a timestamp.
  */
 function buildQuery (filter, { limit, includeDeleted = false } = {}) {

@@ -77,7 +77,7 @@ Stop the relay first: the store is not written concurrently by design.
 ssh beecomb-relay.exe.xyz 'sudo systemctl restart hive'
 
 # redeploy
-npm test && npm run demo:tui -- --demo        # 226/226 and 16/16 must pass first
+npm test && npm run demo:tui -- --demo        # every test and 16/16 demo scenes must pass first
 npm run make:linux-x64                        # → out/linux-x64/hive (~115 MB)
 scp out/linux-x64/hive beecomb-relay.exe.xyz:/tmp/hive.new
 ssh beecomb-relay.exe.xyz '
@@ -223,8 +223,8 @@ Static dir holds — probed with real requests:
 tcp 0.0.0.0:3000    hive          ← the relay, fronted by TLS on 443 and 3000
 tcp 0.0.0.0:22      sshd          ← key auth
 tcp 127.0.0.1:9999  systemd       ← shelley.socket (exe.dev platform agent), loopback only
-udp 0.0.0.0:33000   hive          ← hyperswarm DHT
-udp 0.0.0.0:49737   hive          ← hyperswarm DHT
+udp 0.0.0.0:33000   hive          ← HyperDHT
+udp 0.0.0.0:49737   hive          ← HyperDHT
 ```
 
 - Service runs as **`hive`, not root**, with `ProtectSystem=strict`, `PrivateTmp=yes`,

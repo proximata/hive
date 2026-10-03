@@ -106,7 +106,7 @@ class SqliteStore {
    * Idempotent insert.
    *
    * Returns `{ stored, wasInserted, replaced }`. A known id is a no-op with
-   * `wasInserted: false` — the relay turns that into `["OK", id, true,
+   * `wasInserted: false`. The relay turns that into `["OK", id, true,
    * "duplicate:"]`, since a duplicate is a success from the client's side.
    */
   insertEvent (event, opts = {}) {
@@ -201,9 +201,9 @@ class SqliteStore {
   }
 
   #indexMentions (event) {
-    // The feed answers "who talked to me", so it must not fill up with
-    // machinery: relay-signed notifications and p-gated envelopes carry `p`
-    // tags for routing, not because a human mentioned anyone.
+    // The feed answers "who talked to me", so it must exclude machinery.
+    // Relay-signed notifications and p-gated envelopes carry `p` tags for
+    // routing; no human mentioned anyone.
     if (isRelaySignedKind(event.kind) || isPGatedKind(event.kind)) return
 
     const insert = this.db.prepare(
@@ -243,8 +243,8 @@ class SqliteStore {
 
   /**
    * Query with NIP-01 filters. Each filter runs separately and the results are
-   * merged, deduplicated and capped — which is both simpler and faster than one
-   * giant OR, because each filter can use its own index.
+   * merged, deduplicated and capped. This is simpler and faster than one giant
+   * OR, because each filter can use its own index.
    */
   queryEvents (filters, opts = {}) {
     const limit = Math.min(opts.limit ?? this.maxHistoricalLimit, this.maxHistoricalLimit)
@@ -294,9 +294,9 @@ class SqliteStore {
    * Candidate search hits, ranked by how many query tokens matched and then by
    * recency.
    *
-   * Access control is NOT applied here: the relay re-authorizes every hit
-   * before delivering it. Keeping that separation means the store can never be
-   * the thing that accidentally decides someone may read an event.
+   * Access control is not applied here; the relay re-authorizes every hit
+   * before delivering it. This keeps the store from ever deciding that someone
+   * may read an event.
    */
   search (query, opts = {}) {
     const tokens = tokenizeQuery(query)
@@ -327,7 +327,7 @@ class SqliteStore {
       params.push(opts.since)
     }
 
-    // Every query token must be present, so this is an AND search, not an OR.
+    // Every query token must be present (AND search).
     sql += ' GROUP BY t.event_id HAVING matched = ? ORDER BY matched DESC, e.created_at DESC LIMIT ?'
     params.push(tokens.length, limit)
 
@@ -427,8 +427,7 @@ class SqliteStore {
   // --------------------------------------------------------------- members --
 
   /**
-   * Add or re-add a member. Runs inside a transaction so the "is the caller
-   * allowed" check the relay performs cannot race with a concurrent removal.
+   * Add or re-add a member. The upsert and the read-back run in one transaction.
    */
   addMember (channelId, pubkey, role = 'member') {
     return this.transaction(() => {
@@ -688,9 +687,9 @@ class SqliteStore {
   }
 
   /**
-   * Walk the whole chain recomputing hashes. Returns `{ ok, entries, brokenAt }`
-   * — `brokenAt` is the first sequence number whose stored hash disagrees with
-   * its recomputed one, which is also the earliest possible tamper point.
+   * Walk the chain recomputing hashes. Returns `{ ok, entries, brokenAt }`.
+   * `brokenAt` is the first sequence number whose stored hash disagrees with its
+   * recomputed one, which is also the earliest possible tamper point.
    */
   verifyAuditChain () {
     const rows = this.db.prepare('SELECT * FROM audit_log ORDER BY seq ASC').all()

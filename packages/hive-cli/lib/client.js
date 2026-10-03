@@ -9,8 +9,8 @@ const { buildNip98Header } = require('hive-auth')
 const { CliError } = require('./errors')
 
 /**
- * HTTP client for the relay. Every request is signed with NIP-98, so there is
- * no session to establish and no token to store — an agent needs only its key.
+ * HTTP client for the relay. Every request is signed with NIP-98, so an agent
+ * needs only its key.
  */
 class RelayClient {
   constructor ({ url, secretKey }) {
@@ -90,7 +90,7 @@ function send (target, method, headers, payload) {
     // bare-http1 speaks cleartext only. It happily derives port 443 from an
     // https: URL and then sends a plaintext request at the TLS listener, which
     // answers `400 Bad Request: Client sent an HTTP request to an HTTPS server`
-    // in HTML — no `message` field, so every call against a TLS-fronted relay
+    // in HTML with no `message` field, so every call against a TLS-fronted relay
     // surfaced as the opaque `relay returned 400`. The scheme picks the module.
     const secure = target.protocol === 'https:'
     const agent = secure ? https : http

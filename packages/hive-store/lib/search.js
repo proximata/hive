@@ -2,18 +2,17 @@
 
 const { isSearchable } = require('hive-core')
 
-// Search is a plain inverted index rather than FTS5, because bare-sqlite is
-// compiled without the FTS5 extension. The trade-off is deliberate and cheap:
-// this tokenizer is a dozen lines, works identically on every SQL driver, and
-// makes the privacy exclusion a write-time property that no query path can
-// circumvent.
+// Search is a plain inverted index because bare-sqlite is compiled without the
+// FTS5 extension. The tokenizer is short, works identically on every SQL
+// driver, and makes the privacy exclusion a write-time property that no query
+// path can bypass.
 
 const MAX_TOKENS_PER_EVENT = 512
 const MIN_TOKEN_LENGTH = 2
 const MAX_TOKEN_LENGTH = 64
 
-// Deliberately tiny. An aggressive stopword list hurts recall on technical
-// chat, where "in", "it" and "for" are often part of the thing being searched.
+// Kept small. An aggressive stopword list hurts recall on technical chat, where
+// short words are often part of the thing being searched.
 const STOPWORDS = new Set([
   'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her',
   'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'its',

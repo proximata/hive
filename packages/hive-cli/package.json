@@ -2,7 +2,7 @@
   "name": "hive-cli",
   "version": "0.1.0",
   "description": "Agent-first JSON-in/JSON-out CLI, compatible with buzz-cli",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "main": "index.js",
   "files": [
     "index.js",

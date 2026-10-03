@@ -1,8 +1,7 @@
 'use strict'
 
-// Minimal BIP-173 bech32, enough for NIP-19 npub/nsec/note. Implemented here
-// rather than pulled in as a dependency: it is 60 lines of well-specified code
-// and hive-core is meant to stay dependency-light.
+// Minimal BIP-173 bech32, enough for NIP-19 npub/nsec/note. Implemented here to
+// keep hive-core dependency-light; the algorithm is short and well specified.
 
 const CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l'
 const GENERATOR = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3]
@@ -78,7 +77,7 @@ function decode (str) {
   return { hrp, data: data.slice(0, -6) }
 }
 
-/** Encode 32 raw bytes as a NIP-19 entity, e.g. toWords('npub', pubkeyBytes). */
+/** Encode 32 raw bytes as a NIP-19 entity, e.g. encodeBytes('npub', pubkeyBytes). */
 function encodeBytes (hrp, bytes) {
   return encode(hrp, convertBits(Array.from(bytes), 8, 5, true))
 }

@@ -313,7 +313,7 @@ test('a persona names a model by size, an SDK constant, or not at all', async (t
     'progress reports every 10%, not every tick')
 
   // An exact SDK constant still works, and one this SDK does not export is
-  // passed through rather than refused — a caller may know a newer name.
+  // passed through rather than refused, since a caller may know a newer name.
   const exact = new QvacProvider({ model: 'LLAMA_3_2_1B_INST_Q4_0', sdk: fake })
   await exact.ready()
   t.is(fake.params.modelSrc.expectedSize, 807_000_000)
@@ -355,7 +355,7 @@ test('an agent publishes a capability profile on start', async (t) => {
   t.ok(profile.capabilities.includes('text-generation'))
   t.alike(profile.models, ['mock-1'])
   // Without this, every agent the harness publishes is invisible to
-  // `hive agents find --query` — the discovery verbs read this field.
+  // `hive agents find --query`: the discovery verbs read this field.
   t.is(profile.description, 'reviews pull requests and triages bugs')
 })
 
@@ -382,7 +382,7 @@ test('an agent answers a mention and records the job lifecycle', async (t) => {
 
   const human = await h.connect(alice)
 
-  // Alice opens a channel and invites the agent, exactly as she would a person.
+  // Alice opens a channel and invites the agent as she would a person.
   const create = events.createChannel(alice.secretKey, { name: 'engineering', visibility: 'open' })
   await human.publish(create)
   const channelId = h.store.listChannels()[0].id
@@ -454,7 +454,7 @@ test('an agent never answers itself', async (t) => {
   agent._onevent(ownReply, `chan:${channelId}`)
   t.is(mentions, 0, 'a self-mention is dropped before it can loop')
 
-  // A message that does not mention the agent is context, not a request.
+  // A message that does not mention the agent is context only.
   const notForMe = sign(identity('other'), {
     kind: core.KIND_STREAM_MESSAGE,
     tags: [['h', channelId]],
@@ -463,7 +463,7 @@ test('an agent never answers itself', async (t) => {
   agent._onevent(notForMe, `chan:${channelId}`)
   t.is(mentions, 0, 'an unaddressed message does not trigger a turn')
 
-  // But one that does mention it, does.
+  // A message that mentions the agent is counted as a mention.
   const forMe = sign(identity('other'), {
     kind: core.KIND_STREAM_MESSAGE,
     tags: [['h', channelId], ['p', bot.pubkey]],

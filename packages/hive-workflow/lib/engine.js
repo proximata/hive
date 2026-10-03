@@ -16,8 +16,8 @@ const APPROVAL_TIMEOUT_S = 24 * 60 * 60
  * Buzz leaves two things open here (WF-07 and WF-08): `send_dm` and
  * `set_channel_topic` return NotImplemented, and a run that hits an approval
  * gate is marked failed because the token is never persisted. Both are
- * implemented here — an approval gate suspends the run, stores a hashed
- * single-use token, and `resume()` continues from the next step.
+ * implemented here: an approval gate suspends the run, stores a hashed
+ * single-use token, and `resolveApproval()` continues from the next step.
  */
 class WorkflowEngine extends EventEmitter {
   constructor (relay, opts = {}) {
@@ -210,7 +210,7 @@ class WorkflowEngine extends EventEmitter {
 
       if (result?.suspended === true) {
         // Approval gate: persist the hashed token and where to resume, then
-        // stop. This is the piece Buzz leaves unfinished (WF-08) — without it
+        // stop. This is the piece Buzz leaves unfinished (WF-08). Without it
         // the run is marked failed and the approval has nothing to resume.
         this.createApproval({
           runId,
@@ -362,8 +362,8 @@ class WorkflowEngine extends EventEmitter {
   }
 
   #signAsRelay (kind, tags, content) {
-    // The `buzz: workflow` tag is what keeps workflow output from re-triggering
-    // workflows — without it, a workflow that posts a message can trigger
+    // The `buzz: workflow` tag keeps workflow output from re-triggering
+    // workflows. Without it, a workflow that posts a message can trigger
     // itself forever.
     return this.relay.signAsRelay({ kind, tags, content })
   }

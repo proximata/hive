@@ -10,7 +10,7 @@ import App from './app.js'
 import pkg from './package.json' with { type: 'json' }
 import { run as runCli, commands } from 'hive-cli'
 import { parseArgs } from 'hive-cli/lib/args.js'
-import { resolveBind, resolveBootstrap, resolveReplication } from 'hive-relay/lib/bind.js'
+import { resolveBind, resolveBootstrap, resolveReplication, resolveTransports } from 'hive-relay/lib/bind.js'
 
 // Entry point, following the hello-pear-bare shape: parse flags, resolve a
 // storage directory, construct the App, log its lifecycle.
@@ -37,13 +37,17 @@ const ARGV = /(^|[/\\])bin\.mjs$/.test(rest[0] ?? '') ? rest.slice(1) : rest
 const { positional, flags } = parseArgs(ARGV)
 const mode = positional[0]
 
-const USAGE = `${appName} ${pkg.version} — ${pkg.description}
+const USAGE = `${appName} ${pkg.version}: ${pkg.description}
 
   hive relay [--host 127.0.0.1] [--port 3000] [--public-url <origin>]
              [--storage <dir>] [--web-dir <dir>] [--no-updates] [--no-swarm]
              [--bootstrap host:port[,host:port]] [--replicate <group>]
+             [--transport ws,swarm]
       Run the workspace relay: WebSocket + HTTP on --host:--port, and (unless
-      --no-swarm) reachable peer-to-peer at hyper://<relay pubkey>.
+      --no-swarm) reachable peer-to-peer at hyper://<relay DHT key>.
+      --transport picks the transports by registry name (default ws,swarm;
+      see docs/transports.md). --no-swarm removes swarm from that list, and
+      --replicate adds replication.
       --host defaults to loopback and nothing but --host widens it: pass
       --host 0.0.0.0 to accept connections from the network.
       --public-url is the origin clients reach when a TLS proxy sits in
@@ -56,7 +60,7 @@ const USAGE = `${appName} ${pkg.version} — ${pkg.description}
       exactly as before.
       --replicate turns on relay-to-relay replication: every relay given the
       same group name holds one hypercore of the events it accepted, and
-      merges every other relay's. Omitted — the default — nothing replicates
+      merges every other relay's. Omitted (the default), nothing replicates
       and the relay behaves exactly as a single node.
       --web-dir serves the web client from a directory. A standalone binary
       cannot carry it, so a deploy ships packages/hive-web/public (plus a
@@ -123,12 +127,12 @@ if ((flags.help === true || flags.h === true) && mode !== 'demo') {
 //
 // That only holds because the graph resolves without `@qvac/sdk`, which the
 // agent harness names as an optional peer dependency. See the `#qvac-sdk`
-// import in packages/hive-agent/package.json — without it, bare-pack fails the
+// import in packages/hive-agent/package.json. Without it, bare-pack fails the
 // whole build over a module nobody installs.
 // ------------------------------------------------------------------ agent --
 
 // Also ahead of the CLI dispatch, and for the opposite reason to `demo`: the
-// CLI runner is request/response — it returns JSON and exits — and an agent is
+// CLI runner is request/response (it returns JSON and exits) and an agent is
 // a process that stays up. Wiring it as a `commands` entry would mean a handler
 // that never resolves and prints nothing until it does.
 if (mode === 'agent' && positional[1] === 'run') {
@@ -203,10 +207,12 @@ const dir = storage ?? path.join(os.tmpdir(), 'hive', appName)
 let bind
 let bootstrap
 let replicate
+let transports
 try {
   bind = resolveBind(flags, env)
   bootstrap = resolveBootstrap(flags, env)
   replicate = resolveReplication(flags, env)
+  transports = resolveTransports(flags, { replicate })
 } catch (err) {
   console.error(`[relay] ${err.message}`)
   Bare.exit(1)
@@ -223,7 +229,7 @@ const app = new App({
   port: bind.port,
   publicUrl: bind.publicUrl,
   webDir: flags.webDir ?? env.HIVE_WEB_DIR ?? null,
-  swarm: flags.swarm,
+  transports,
   bootstrap,
   replicate
 })
@@ -232,7 +238,7 @@ const app = new App({
 // the network is a deliberate act, and the operator should be able to see in
 // the log that it was theirs.
 if (!bind.loopback) {
-  console.log(`[relay] BOUND TO ${bind.host} — reachable from the network, not just this machine`)
+  console.log(`[relay] BOUND TO ${bind.host}, reachable from the network and not just this machine`)
 }
 
 app.on('listening', (m) => {
@@ -243,6 +249,9 @@ app.on('listening', (m) => {
 })
 app.on('swarm', (m) => console.log(`[relay] reachable at ${m.link}`))
 app.on('replication', (m) => console.log(`[relay] replicating group ${m.group} as ${m.feed}`))
+app.on('transport', (m) => {
+  if (!['ws', 'swarm', 'replication'].includes(m.id)) console.log(`[relay] ${m.id} transport at ${m.link}`)
+})
 app.on('ready-relay', (m) => {
   console.log(`[relay] identity ${m.npub}`)
   console.log(`[relay] storage  ${m.storage}`)
@@ -251,7 +260,7 @@ app.on('ready-relay', (m) => {
 
 app.on('updating', () => console.log('[updater] fetching a new version'))
 app.on('updated', () => console.log('[updater] update staged, applying'))
-app.on('update-applied', () => console.log('[updater] applied — restart to run the latest version'))
+app.on('update-applied', () => console.log('[updater] applied, restart to run the latest version'))
 app.on('updater-disabled', () => {})
 app.on('worker-error', (m) => console.error('[relay:error]', m.message))
 app.on('error', (err) => console.error('[app:error]', err.message))

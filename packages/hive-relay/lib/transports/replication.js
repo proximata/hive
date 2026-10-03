@@ -7,6 +7,7 @@ const b4a = require('b4a')
 
 const { sha256, LIMITS } = require('hive-core')
 const { TokenBucket } = require('hive-auth')
+const { Transport } = require('./transport')
 
 // Relay-to-relay replication: one hypercore per relay, merged on ingest.
 //
@@ -31,8 +32,8 @@ const { TokenBucket } = require('hive-auth')
 //     it minted a random uuid, so the same create event produced a different
 //     channel id on each relay and every later message was 'unknown channel'
 //     on the peer. Fixed at handlers.js `uuidFrom`. Any NEW command handler
-//     that derives state from something other than the event — a clock, a
-//     random source, this relay's own store — reintroduces the same fork.
+//     that derives state from something other than the event (a clock, a
+//     random source, this relay's own store) reintroduces the same fork.
 //   - RELAY-SIGNED KINDS cannot cross at all. `_validateIngest` rejects them
 //     unless signed by the ingesting relay's own key, which is the rule that
 //     stops a peer forging membership on our behalf. So group metadata,
@@ -51,8 +52,8 @@ const { TokenBucket } = require('hive-auth')
 // LIMITS AT THIS DESIGN POINT, named rather than discovered later:
 //   - Storage is unbounded: every relay ends up holding everything from
 //     everyone. Fine at 3 nodes. The trigger for selective replication is the
-//     first relay that wants a subset — a channel allowlist or a kind filter
-//     applied while tailing — not a size threshold.
+//     first relay that wants a subset (a channel allowlist or a kind filter
+//     applied while tailing), not a size threshold.
 //   - Propagation is direct only. A relay does NOT re-append a peer's events
 //     to its own core, so an event reaches exactly the relays connected to its
 //     origin. That keeps trust one hop deep and storage linear; the trigger to
@@ -63,9 +64,9 @@ const { TokenBucket } = require('hive-auth')
 //   - Three nodes on one VM share a failure domain. This buys convergence, and
 //     specifically not availability.
 //   - A rejected block is never retried. A channel message whose create event
-//     has not arrived yet — possible when the two came from DIFFERENT peer
-//     feeds, since ordering only holds within one feed — is dropped for good;
-//     the reader has no cursor to rewind. The trigger to build a retry queue
+//     has not arrived yet is dropped for good. That is possible when the two
+//     came from DIFFERENT peer feeds, since ordering only holds within one
+//     feed. The reader has no cursor to rewind. The trigger to build a retry queue
 //     is the first deployment where the same author writes to two relays.
 
 /** Bytes of one core block we are willing to parse as an event. */
@@ -78,9 +79,9 @@ const MAX_BLOCK_BYTES = LIMITS.MAX_FRAME_BYTES
  * ingest deliberately does not use it: a peer replaying a year of history is
  * legitimate traffic from thousands of pubkeys, and dropping it would leave
  * the two stores permanently divergent. So the cap here paces rather than
- * drops — the feed is durable and ordered, so pausing loses nothing — and it
- * is per feed rather than per author, because the feed is what an operator
- * chose to trust.
+ * drops: the feed is durable and ordered, so pausing loses nothing. It is per
+ * feed rather than per author, because the feed is what an operator chose to
+ * trust.
  */
 const DEFAULT_INGEST_EVENTS_PER_SECOND = 200
 
@@ -102,7 +103,7 @@ function manifestFor (publicKey) {
  * must not hand peers a second name for the client-facing endpoint.
  *
  * ponytail: this ONE keypair is both the Hyperswarm identity and the
- * hypercore's signer, which is what makes peer discovery free — the core key
+ * hypercore's signer, which is what makes peer discovery free: the core key
  * is derived from `connection.remotePublicKey`, so there is no announcement
  * protocol at all. Upgrade path if the keys ever have to differ (rotation, or
  * more than one core per relay): a Protomux channel on the same stream
@@ -125,15 +126,24 @@ function replicationTopic (name) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-class ReplicationTransport {
+/**
+ * A transport between relays. It shares the lifecycle of `Transport` (`link`,
+ * `listen`, `close`, `describe`) but never calls `accept`: a replication peer is
+ * another relay's hypercore, not a Nostr client with a `Connection`.
+ */
+class ReplicationTransport extends Transport {
   constructor (relay, opts = {}) {
     if (typeof opts.storageDir !== 'string' && opts.corestore === undefined) {
       throw new Error('replication needs a storageDir')
     }
 
-    this.relay = relay
+    super(relay, opts)
+
     this.keyPair = opts.keyPair ?? replicationKeyPair(relay.secretKey)
     this.publicKey = b4a.toString(this.keyPair.publicKey, 'hex')
+    // The group name as the operator typed it, for display. Null when the
+    // caller passed a ready-made topic buffer.
+    this.group = typeof opts.topic === 'string' ? opts.topic : null
     this.topic = typeof opts.topic === 'string' ? replicationTopic(opts.topic) : (opts.topic ?? null)
     this.bootstrap = opts.bootstrap
 
@@ -159,6 +169,10 @@ class ReplicationTransport {
   /** The pear-style link a peer needs to fetch this relay's feed. */
   get link () {
     return 'hyper://' + this.publicKey
+  }
+
+  describe () {
+    return { group: this.group, feed: this.link }
   }
 
   async listen () {
@@ -208,7 +222,7 @@ class ReplicationTransport {
     // Always from block 0. A peer can replay its whole history at any time, on
     // any restart, and that must be cheap rather than merely tolerated: a known
     // id costs one indexed lookup in insertEvent and nothing else. Persisting a
-    // cursor would buy little — hypercore does not re-download blocks it has —
+    // cursor would buy little (hypercore does not re-download blocks it has)
     // and would be one more piece of state to get wrong.
     const stream = core.createReadStream({ live: true, start: 0 })
     const bucket = new TokenBucket(this.maxEventsPerSecond, this.maxEventsPerSecond, Date.now())
@@ -226,7 +240,7 @@ class ReplicationTransport {
         await this._ingest(block, hex)
       }
     } catch (err) {
-      // A live read stream ends by being destroyed — on close, or when the peer
+      // A live read stream ends by being destroyed, on close or when the peer
       // goes. That is the normal exit from this loop and not an error.
       if (this.closing || err.code === 'STREAM_DESTROYED') return
       throw err
@@ -254,7 +268,7 @@ class ReplicationTransport {
     // An id we already hold, answered BEFORE the pipeline rather than by it.
     //
     // A peer replays its whole feed on every reconnect, and the pipeline's own
-    // duplicate check is step 8 — after step 5 verifies the signature. Without
+    // duplicate check is step 8, after step 5 verifies the signature. Without
     // this line a re-read of a 100k-event history schnorr-verifies 100k events
     // to discard all of them, which is the cost the `follow()` comment claims
     // is 'one indexed lookup and nothing else'. Now it is.

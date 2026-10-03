@@ -16,10 +16,8 @@ const FramedStream = require('framed-stream')
 const { openStore } = require('hive-store')
 const {
   Relay,
-  WebSocketTransport,
-  SwarmTransport,
-  ReplicationTransport,
   MediaStore,
+  transports,
   resolveBootstrap,
   resolveReplication
 } = require('hive-relay')
@@ -37,7 +35,7 @@ const [
   dir,
   app,
   portArg,
-  swarmArg,
+  transportsArg,
   hostArg,
   publicUrlArg,
   webDirArg,
@@ -49,7 +47,9 @@ const updates = updatesArg !== 'false'
 // Not `|| 3000`: port 0 is meaningful (let the OS pick), and the old form
 // turned an explicit --port 0 back into 3000 here after bin.mjs had honoured it.
 const port = Number.isInteger(Number(portArg)) ? Number(portArg) : 3000
-const swarmEnabled = swarmArg !== 'false'
+// Registry names from bin.mjs (resolveTransports), in start order. An unknown
+// name is caught below by createTransport, before anything is announced.
+const transportIds = (transportsArg ?? 'ws,swarm').split(',').filter(Boolean)
 // bin.mjs validated these; the fallback is only for a worker started by hand.
 const host = hostArg === undefined || hostArg === '' ? '127.0.0.1' : hostArg
 const publicUrl = publicUrlArg === undefined || publicUrlArg === '' ? null : publicUrlArg
@@ -101,6 +101,10 @@ function resolveWebDir () {
 }
 
 async function main () {
+  // An unknown transport name fails here, before the store is opened or
+  // anything listens.
+  for (const id of transportIds) transports.getTransport(id)
+
   fs.mkdirSync(dir, { recursive: true })
 
   // The relay's identity is persisted, because it is also its dial address:
@@ -149,39 +153,31 @@ async function main () {
   //
   // So: --web-dir points at a directory, and it ships next to the binary.
   // Unset, it falls back to the source tree, which is what a dev run wants and
-  // what a standalone binary will not find — in which case no web client is
+  // what a standalone binary will not find. In that case no web client is
   // served and every API route behaves exactly as before.
   const publicDir = resolveWebDir()
   if (publicDir === null) say('notice', { message: 'no web client directory; serving the API only' })
 
-  const wsTransport = new WebSocketTransport(relay, { host, port, publicUrl, mediaStore, publicDir })
-  await wsTransport.listen()
-  // Report the URL that was actually bound, including the port the OS picked
-  // for --port 0, and the public origin when one is configured.
-  say('listening', {
-    url: relay.url.replace(/^ws/, 'http'),
-    host,
-    port: wsTransport.port
-  })
-
-  let swarmTransport = null
-  if (swarmEnabled) {
-    swarmTransport = new SwarmTransport(relay, { bootstrap })
-    await swarmTransport.listen()
-    say('swarm', { link: swarmTransport.link, publicKey: swarmTransport.publicKey })
+  // Options that only some transports take. Everything else uses defaults.
+  const transportOptions = {
+    ws: { host, port, publicUrl, mediaStore, publicDir },
+    swarm: { bootstrap },
+    // Relay-to-relay replication. Only started when the list names it, which
+    // resolveTransports does for --replicate and nothing else: with no
+    // --replicate this opens no corestore, joins no topic and leaves the event
+    // path untouched.
+    replication: { storageDir: path.join(dir, 'replication'), topic: replicate, bootstrap }
   }
 
-  // Relay-to-relay replication. Off unless asked for: with no --replicate this
-  // opens no corestore, joins no topic and leaves the event path untouched.
-  let replication = null
-  if (replicate !== null) {
-    replication = new ReplicationTransport(relay, {
-      storageDir: path.join(dir, 'replication'),
-      topic: replicate,
-      bootstrap
-    })
-    await replication.listen()
-    say('replication', { group: replicate, feed: replication.link })
+  const active = []
+  for (const id of transportIds) {
+    const transport = transports.createTransport(id, relay, transportOptions[id] ?? {})
+    await transport.listen()
+    active.push(transport)
+    // describe() carries what an operator needs for each transport: the bound
+    // URL and port for ws (the port the OS picked for --port 0, or the public
+    // origin), the key for swarm, the group and feed for replication.
+    say('transport', { id, link: transport.link, ...transport.describe() })
   }
 
   say('ready', {
@@ -193,10 +189,12 @@ async function main () {
 
   // ------------------------------------------------------------------ OTA --
 
+  let pear = null
+
   if (updates && typeof upgrade === 'string' && upgrade.startsWith('pear://')) {
     try {
       const PearRuntime = require('pear-runtime')
-      const pear = new PearRuntime({
+      pear = new PearRuntime({
         dir,
         version,
         upgrade,
@@ -207,10 +205,17 @@ async function main () {
 
       pear.on('error', (err) => say('error', { message: 'updater: ' + err.message }))
       pear.updater.on('updating', () => say('updating'))
-      pear.updater.on('updated', () => {
+      pear.updater.on('updated', async () => {
         say('updated')
-        pear.updater.applyUpdate()
-        say('update-applied')
+        // applyUpdate() is async: it swaps the staged binary in. Saying
+        // 'update-applied' before it resolves reported a swap that had not
+        // happened, and a failure surfaced as an unhandled rejection.
+        try {
+          await pear.updater.applyUpdate()
+          say('update-applied')
+        } catch (err) {
+          say('error', { message: 'updater: ' + err.message })
+        }
       })
 
       await pear.ready()
@@ -227,11 +232,22 @@ async function main () {
   const shutdown = async () => {
     say('closing')
     relay.close()
-    await wsTransport.close()
-    if (swarmTransport !== null) await swarmTransport.close()
-    if (replication !== null) await replication.close()
+    for (const transport of active) await transport.close()
+
+    // pear-runtime opens a Corestore and a swarm of its own, and only close()
+    // releases them.
+    try {
+      await pear?.close()
+    } catch (err) {
+      say('error', { message: 'updater close: ' + err.message })
+    }
+
     store.close()
-    Bare.exit(0)
+    // The host waits for this instead of guessing how long a close takes.
+    say('closed')
+
+    // Let the pipe flush the last message before this thread ends.
+    setTimeout(() => Bare.exit(0), 50)
   }
 
   pipe.on('data', (data) => {
@@ -256,5 +272,8 @@ function loadOrCreateKey (file) {
 
 main().catch((err) => {
   say('error', { message: err.message, stack: err.stack })
-  Bare.exit(1)
+  // Let the pipe flush the message before this thread ends; exiting at once
+  // made a startup failure (an unknown --transport, a bad --web-dir) exit
+  // without a word.
+  setTimeout(() => Bare.exit(1), 50)
 })

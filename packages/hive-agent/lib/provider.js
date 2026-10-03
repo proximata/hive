@@ -3,11 +3,10 @@
 /**
  * The inference boundary.
  *
- * Everything above this line is protocol; everything below is a model. Keeping
- * them apart is what lets the whole relay and agent test suite run with no GPU,
- * no model download and no network — and what lets a persona choose a local
- * model, a delegated peer, or something else entirely without the harness
- * caring.
+ * Everything above this line is protocol and everything below is a model.
+ * Keeping them apart lets the relay and agent test suites run without a GPU,
+ * model download or network, and lets a persona choose a local model or a
+ * delegated peer without the harness changing.
  *
  *   capabilities()  -> string[]                     what this provider can do
  *   complete(req)   -> { events, final }            streaming generation
@@ -16,8 +15,8 @@
  *   speak(text)     -> { audio }
  *
  * `complete` returns an object with an async-iterable `events` and a `final`
- * promise, mirroring the QVAC SDK's CompletionRun so the real adapter is a thin
- * translation rather than a re-shaping.
+ * promise, mirroring the QVAC SDK's CompletionRun, so the real adapter is a
+ * thin translation.
  *
  * Three OPTIONAL fields on `final` let a provider drive the harness without the
  * harness knowing anything about a particular model. All three are ignored when
@@ -73,11 +72,10 @@ class InferenceProvider {
 }
 
 /**
- * Deterministic provider used by every test and by `--inference mock`.
+ * Deterministic provider used by every test and by a persona whose `runtime` is `mock`.
  *
- * It is deliberately dull: given the same history it produces the same reply,
- * so a test can assert on exact output and a failure means the harness broke,
- * not that a model drifted.
+ * The same history always produces the same reply, so a test can assert on
+ * exact output and a failure points at the harness instead of model drift.
  */
 class MockProvider extends InferenceProvider {
   constructor (opts = {}) {
@@ -117,8 +115,8 @@ class MockProvider extends InferenceProvider {
   }
 
   async embed (texts) {
-    // A stable bag-of-characters projection: not useful for retrieval, but
-    // deterministic and dimensionally correct, which is what a test needs.
+    // Stable bag-of-characters projection. It is useless for retrieval, but it
+    // is deterministic and has the right dimension, which is all a test needs.
     return (Array.isArray(texts) ? texts : [texts]).map((text) => {
       const vector = new Array(8).fill(0)
       for (let i = 0; i < text.length; i++) vector[i % 8] += text.charCodeAt(i) / 1000
@@ -166,8 +164,8 @@ function classify (text) {
 // Owned here rather than by the caller precisely so it can be taken apart
 // again. Without that, the second agent in a chain summarises the FIRST agent's
 // envelope instead of the request inside it, and by the third hop the message
-// is a summary of a header. Routing still matches the whole line — the header
-// IS the addressing — but triage only ever sees the payload.
+// is a summary of a header. Routing still matches the whole line (the header
+// IS the addressing), but triage only ever sees the payload.
 const ENVELOPE = /^@(\S+)\s+—\s+(.*?)\s+\[(critical|high|normal|low)\]:\s*/
 const TRAIL = ' · '
 
@@ -191,7 +189,7 @@ function escalate (level, declared) {
 /**
  * Extractive summary: drop filler, keep order, cap the length.
  *
- * Lossy on purpose and reversible by eye — a reader can diff it against the
+ * Lossy on purpose and reversible by eye: a reader can diff it against the
  * original and see exactly what was thrown away, which is the property a
  * `sleep()` pretending to think does not have.
  */
@@ -207,7 +205,7 @@ function condense (text, max = 16) {
  *
  * QVAC is an optional peer dependency and is not installed, so there is no
  * model on this machine at all. That makes a scripted provider the only
- * available choice — and the right one anyway for a recorded demo, because the
+ * available choice, and the right one anyway for a recorded demo, because the
  * same input produces byte-identical output on every take.
  *
  * What it actually does with a message, all of it derived from the text:
@@ -268,7 +266,7 @@ class ScriptedProvider extends InferenceProvider {
     const summary = condense(request)
 
     // Slugged by the hash of the request, so the same request always lands on
-    // the same addressable slot — a repeat replaces rather than piles up — and
+    // the same addressable slot (a repeat replaces rather than piles up), and
     // a checker that knows the text can compute the slug and read it back.
     const memo = {
       slug: `triage/${core.toHex(core.sha256(Buffer.from(request, 'utf8'))).slice(0, 12)}`,

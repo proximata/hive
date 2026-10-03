@@ -125,9 +125,9 @@ const commands = {
 
     await ctx.client.publish(event)
 
-    // Return the created channel rather than the command event: the id is what
-    // every follow-up command needs, and making the caller derive it from a
-    // discovery query would be hostile.
+    // Return the created channel instead of the command event: the id is what
+    // every follow-up command needs, and a caller should not have to derive it
+    // from a discovery query.
     const channels = await ctx.client.get('/api/channels')
     const created = channels.filter((c) => c.name === event.tags.find((t) => t[0] === 'name')[1])
     return created[created.length - 1] ?? { event }
@@ -379,8 +379,8 @@ const commands = {
 
   /**
    * `--capability` is an EXACT tag match and `--query` is token-AND over the
-   * relay's existing search index — never substring. Substring would make `ai`
-   * match `chain`, and a discovery verb that returns noise is worse than none.
+   * relay's existing search index. Substring matching would make `ai` match
+   * `chain`, and a discovery verb that returns noise is worse than none.
    */
   'agents find': async (ctx) => {
     const query = ctx.flags.query ?? ctx.positional[0]
@@ -659,12 +659,13 @@ const commands = {
  * Ownership is THREE states, never two, and they are carried in the shape
  * itself because a consuming agent reads the shape and not this comment:
  *
- *   ownership: 'verified' — the profile carries a NIP-OA `auth` tag the owner
- *     signed over this agent's key. Only then is a bare `owner` field present.
- *   ownership: 'claimed'  — content.owner names a human who never signed
+ *   ownership: 'verified' when the profile carries a NIP-OA `auth` tag the
+ *     owner signed over this agent's key. Only then is a bare `owner` field
+ *     present.
+ *   ownership: 'claimed' when content.owner names a human who never signed
  *     anything. Reported as `ownerClaimed` only; there is no `owner` field to
  *     misread, and `ownerVerified` is false.
- *   ownership: 'none'     — nobody claimed, or the profile owns itself, which
+ *   ownership: 'none' when nobody claimed, or the profile owns itself, which
  *     is what the harness writes when no owner was configured.
  *
  * An unverifiable claim is DOWNGRADED, never rejected: a signature proves
@@ -730,12 +731,12 @@ function byCapability (records, ctx) {
 }
 
 /**
- * A `created_at` that is guaranteed to supersede the current head of an
- * addressable coordinate.
+ * A `created_at` chosen to supersede the current head of an addressable
+ * coordinate.
  *
  * NIP-01 timestamps have second resolution and ties are broken by the *lowest*
  * event id, so writing the same slug twice within one second can silently keep
- * the older value — "set it, then set it again" would appear to do nothing.
+ * the older value, and "set it, then set it again" would appear to do nothing.
  * Bumping past the existing head makes the write land. Buzz solves the same
  * problem the same way for its membership roster.
  */

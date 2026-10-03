@@ -1,8 +1,8 @@
 'use strict'
 
 // Buzz defines four rate-limit tiers but ships only a permissive stub, so
-// nothing is actually enforced there. Hive implements them: the tiers below are
-// Buzz's, the token bucket is ours.
+// nothing is enforced there. Hive enforces them: the tiers below are Buzz's,
+// the token bucket is Hive's.
 
 const TIERS = {
   human: { events: 30, burst: 60, subscriptions: 20, window: 60 },

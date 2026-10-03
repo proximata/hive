@@ -27,8 +27,8 @@ class WorkflowError extends Error {
 }
 
 /**
- * Parse and validate a definition. Accepts YAML or JSON — agents tend to emit
- * JSON, humans YAML, and there is no reason to make either wrong.
+ * Parse and validate a definition. Accepts YAML or JSON, because agents tend
+ * to emit JSON and humans YAML.
  */
 function parseWorkflow (source) {
   let raw
@@ -103,12 +103,12 @@ function parseWorkflow (source) {
 }
 
 /**
- * Single-pass template resolution — `{{trigger.text}}`, `{{steps.ID.output}}`.
+ * Single-pass template resolution for `{{trigger.text}}`, `{{steps.ID.output}}`.
  *
- * Single pass on purpose: resolving recursively would let a message whose text
- * is itself `{{...}}` reach into the context, which is a small injection
- * primitive nobody needs. Unknown variables are left as literal text so a
- * typo is visible in the output rather than silently blank.
+ * Resolution is single pass because recursing would let a message whose text
+ * is itself `{{...}}` reach into the context (an injection primitive).
+ * Unknown variables are left as literal text so a typo is visible in the
+ * output instead of silently blank.
  */
 function resolveTemplate (text, context) {
   if (typeof text !== 'string') return text

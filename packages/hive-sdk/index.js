@@ -2,9 +2,9 @@
 
 const core = require('hive-core')
 
-// Typed event builders shared by the CLI and the agent harness. Having one
-// place that knows which tags a kind requires is what keeps the two from
-// drifting — and from each inventing their own slightly-wrong tag shapes.
+// Typed event builders shared by the CLI and the agent harness. One place knows
+// which tags a kind requires, so the two cannot drift or invent slightly
+// different tag shapes.
 
 function build (secretKey, kind, tags, content) {
   return core.finalizeEvent({ kind, tags, content }, secretKey)
@@ -14,7 +14,7 @@ const events = {
   // ------------------------------------------------------------- messages --
 
   // `extraTags` exists so callers can attach a tag this builder has no opinion
-  // about — the agent harness's hop counter is the first — without rebuilding
+  // about (the agent harness's hop counter is the first), without rebuilding
   // the h/e/p shape by hand and drifting from it.
   message (secretKey, { channel, content, replyTo = null, rootId = null, mentions = [], extraTags = [] }) {
     const tags = [['h', channel]]
@@ -190,7 +190,7 @@ const events = {
   },
 
   managedAgent (secretKey, { agentPubkey, persona, displayName }) {
-    // Public projection only — never secrets, env vars or runtime config.
+    // Public projection only: no secrets, env vars or runtime config.
     return build(secretKey, core.KIND_MANAGED_AGENT, [['d', agentPubkey], ['p', agentPubkey]], JSON.stringify({
       agent: agentPubkey,
       persona,
@@ -230,8 +230,8 @@ const events = {
   },
 
   turnMetric (secretKey, { owner, jobId, metrics }) {
-    // p-gated and encrypted to the owner in production; the tag shape is what
-    // the relay enforces on.
+    // The content is plain JSON here. The kind is p-gated, so the relay only
+    // delivers it to the owner named in the `p` tag.
     return build(secretKey, core.KIND_AGENT_TURN_METRIC, [['p', owner], ['d', jobId]], JSON.stringify(metrics))
   },
 

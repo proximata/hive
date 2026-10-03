@@ -10,7 +10,7 @@ const path = require('bare-path')
 // module is exactly the kind of thing that produces a traversal bug.
 
 // An extension not in this map is not served at all. Allow-listing the type
-// rather than guessing it means nothing on disk — a key, a .db, a .env — can be
+// rather than guessing it means nothing on disk (a key, a .db, a .env) can be
 // handed out just because it happened to sit in the served directory.
 const STATIC_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -36,7 +36,7 @@ const STATIC_TYPES = {
  *
  * The order matters. Decode first, because `%2e%2e%2f` is `../` and a check
  * against the raw string would miss it. Then normalize, which collapses `..`
- * lexically — that is what makes the prefix test decisive, since it is applied
+ * lexically. That is what makes the prefix test decisive, since it is applied
  * to the resolved path and never to the input.
  *
  * `root` must already be absolute (createStaticServer resolves it once).
@@ -46,7 +46,7 @@ function resolveStatic (root, pathname) {
   try {
     decoded = decodeURIComponent(pathname)
   } catch {
-    return null // malformed percent-encoding — not a path we are willing to guess at
+    return null // malformed percent-encoding: not a path we are willing to guess at
   }
 
   // A NUL truncates the name in some syscalls, so `/app.js\0.png` could pass an
@@ -66,7 +66,7 @@ function resolveStatic (root, pathname) {
  * one.
  *
  * `dir` is the web client. `vendor` is an optional second root, mounted at
- * /vendor/, for ES modules that live in node_modules — a browser has no
+ * /vendor/, for ES modules that live in node_modules. A browser has no
  * CommonJS, so @noble is served from where npm installed it instead of being
  * copied into the repo where it would drift. One guard, two roots.
  */
@@ -116,7 +116,7 @@ function createStaticServer ({ dir, vendor = null }) {
  *
  * `dir` is the web client directory. A `vendor/` inside it wins, because in a
  * standalone binary require.resolve answers with a path *inside the bundle*
- * (`bare:/app.bundle/node_modules/...`) which readFile cannot open — the mount
+ * (`bare:/app.bundle/node_modules/...`) which readFile cannot open. The mount
  * would exist and every file under it would 404. A deployed tree therefore
  * ships its own copy of @noble beside the page; a dev run has neither and falls
  * through to node_modules.

@@ -6,17 +6,21 @@ const b4a = require('b4a')
 
 const { LIMITS } = require('hive-core')
 const { createRestRouter } = require('../rest')
+const { Transport, TransportClient } = require('./transport')
+
+const CLOSE_GRACE_MS = 1000
 
 /**
- * WebSocket + HTTP on one port.
+ * WebSocket and HTTP on one port.
  *
  * bare-ws accepts an existing server, so the HTTP router and the WebSocket
- * upgrade share a listener — which is what lets a client use `http://host` and
- * `ws://host` interchangeably, exactly as Buzz does.
+ * upgrade share a listener. That lets a client use `http://host` and
+ * `ws://host` interchangeably, as Buzz does.
  */
-class WebSocketTransport {
+class WebSocketTransport extends Transport {
   constructor (relay, opts = {}) {
-    this.relay = relay
+    super(relay, opts)
+
     this.port = opts.port ?? 3000
     // Loopback unless the caller says otherwise. Every path that widens this
     // starts at an explicit --host; see packages/hive-relay/lib/bind.js.
@@ -34,6 +38,11 @@ class WebSocketTransport {
     this.server = http.createServer((req, res) => this._onrequest(req, res))
     this.wss = new ws.Server({ server: this.server }, (socket) => this._onconnection(socket))
     this.sockets = new Set()
+    this._onidle = null
+  }
+
+  get link () {
+    return this.relay.url
   }
 
   listen () {
@@ -48,7 +57,18 @@ class WebSocketTransport {
     })
   }
 
-  close () {
+  async close () {
+    // end() runs the WebSocket closing handshake, so clients see the shutdown.
+    // destroy() would drop the TCP link without telling them, and so would
+    // closing the HTTP server while a close frame is still in flight.
+    for (const socket of [...this.sockets]) {
+      try {
+        socket.end()
+      } catch {}
+    }
+    await this._untilNoSockets(CLOSE_GRACE_MS)
+
+    // A peer that never answers the close frame must not hold shutdown open.
     for (const socket of [...this.sockets]) {
       try {
         socket.destroy()
@@ -56,26 +76,44 @@ class WebSocketTransport {
     }
     this.sockets.clear()
 
-    return new Promise((resolve) => this.server.close(() => resolve()))
+    await new Promise((resolve) => this.server.close(() => resolve()))
+  }
+
+  _untilNoSockets (timeout) {
+    if (this.sockets.size === 0) return Promise.resolve()
+
+    return new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(timer)
+        this._onidle = null
+        resolve()
+      }
+      const timer = setTimeout(finish, timeout)
+      this._onidle = finish
+    })
   }
 
   address () {
     return this.server.address()
   }
 
+  /** The URL that was actually bound (the port the OS picked for port 0, or the public origin). */
+  describe () {
+    return { url: this.relay.url.replace(/^ws/, 'http'), host: this.host, port: this.port }
+  }
+
   _onconnection (socket) {
     this.sockets.add(socket)
 
-    const connection = this.relay.connect({
+    const session = this.accept({
       send: (frame) => {
         socket.write(frame)
         return true
       },
-      close: () => socket.end(),
-      url: this.relay.url
+      close: () => socket.end()
     })
 
-    if (connection === null) {
+    if (session === null) {
       socket.end()
       this.sockets.delete(socket)
       return
@@ -83,16 +121,17 @@ class WebSocketTransport {
 
     socket.on('data', (data) => {
       if (data.byteLength > LIMITS.MAX_FRAME_BYTES) {
-        connection.send(JSON.stringify(['NOTICE', 'invalid: frame too large']))
-        connection.close('frame too large')
+        session.connection.send(JSON.stringify(['NOTICE', 'invalid: frame too large']))
+        session.closed('frame too large')
         return
       }
-      Promise.resolve(connection.message(b4a.toString(data))).catch((err) => this.relay.emit('error', err))
+      session.receive(b4a.toString(data))
     })
 
     const done = () => {
       this.sockets.delete(socket)
-      connection.close('transport closed')
+      session.closed()
+      if (this.sockets.size === 0) this._onidle?.()
     }
     socket.on('close', done)
     socket.on('end', done)
@@ -115,4 +154,40 @@ class WebSocketTransport {
   }
 }
 
-module.exports = { WebSocketTransport }
+/**
+ * Client side: a WebSocket to `ws://host:port` (or `http://host:port`).
+ *
+ * `connect` returns without waiting for the socket to open. A refused
+ * connection arrives through `onerror` (or `onclose` when none is given), the
+ * same way a dropped one does, so callers have one path for both.
+ */
+class WebSocketClient extends TransportClient {
+  constructor (opts = {}) {
+    super(opts)
+    this.socket = null
+  }
+
+  async connect (address, { onframe, onclose, onerror } = {}) {
+    const target = new URL(address.replace(/^ws/, 'http'))
+    const socket = new ws.Socket({ host: target.hostname, port: Number(target.port) || 80 })
+
+    socket.on('data', (data) => onframe?.(data.toString()))
+    socket.on('close', () => onclose?.())
+    socket.on('error', (err) => (onerror ?? onclose)?.(err))
+
+    this.socket = socket
+  }
+
+  send (frame) {
+    this.socket.write(frame)
+  }
+
+  async close () {
+    if (this.socket !== null) {
+      this.socket.end()
+      this.socket = null
+    }
+  }
+}
+
+module.exports = { WebSocketTransport, WebSocketClient }

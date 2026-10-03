@@ -159,7 +159,7 @@ test('two relays fed the same events in opposite order converge', async (t) => {
   ]
 
   // Same events, opposite arrival order, and each relay only ever sees its own
-  // half as a local accept — the rest has to arrive by replication.
+  // half as a local accept. The rest has to arrive by replication.
   for (const event of events) await accept(a, event)
   for (const event of [...events].reverse()) await accept(b, event)
 

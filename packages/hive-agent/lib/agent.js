@@ -12,9 +12,9 @@ const { providerFromPersona } = require('./qvac')
 // How far a chain of agent-to-agent replies may travel before it is cut.
 //
 // Every reply an agent makes p-tags whoever triggered it, and nothing in this
-// harness distinguishes a human sender from an agent one — which is exactly
-// what makes agent-to-agent work with no new protocol, and exactly what makes
-// two agents mentioning each other a guaranteed infinite loop. Measured before
+// harness distinguishes a human sender from an agent one. That is what makes
+// agent-to-agent work with no new protocol, and it is also what makes two
+// agents mentioning each other a guaranteed infinite loop. Measured before
 // this guard existed: 143 messages per second between two agents, content
 // compounding on every hop, terminated only by the relay's per-pubkey token
 // bucket.
@@ -22,7 +22,7 @@ const { providerFromPersona } = require('./qvac')
 // So each reply carries `["hop", "n"]` and an agent refuses to answer anything
 // already at the ceiling. 4 leaves room for human → A → B → human with slack.
 //
-// ponytail: the tag is self-signed and therefore forgeable — a hostile agent
+// ponytail: the tag is self-signed and therefore forgeable, so a hostile agent
 // can reset its own hop count to 0 forever. Ceiling accepted because it
 // terminates every honest topology and the rate limiter is still the
 // adversarial backstop. Upgrade path: have the relay stamp the hop on ingest by
@@ -40,14 +40,14 @@ function hopOf (event) {
  *
  * An agent is a Nostr keypair that joined some channels. It watches for
  * mentions, batches them per channel, asks its provider for a reply, and posts
- * the reply as an ordinary kind-9 message — signed by itself, audited like
- * anyone else's. Nothing about it is privileged; the relay cannot tell it from
- * a person.
+ * the reply as an ordinary kind-9 message, signed by itself and audited like
+ * anyone else's. It has no special privileges, and the relay handles its
+ * messages like a person's.
  *
  * Backpressure is per channel: at most one turn is in flight per channel, and
  * mentions that arrive during a turn are batched into the next prompt. A slow
- * turn in one channel therefore never blocks another, and a burst of mentions
- * produces one considered reply rather than five racing ones.
+ * turn in one channel therefore does not block another, and a burst of
+ * mentions is answered in batches instead of by several racing replies.
  */
 class Agent extends EventEmitter {
   constructor (opts = {}) {
@@ -62,7 +62,7 @@ class Agent extends EventEmitter {
     // An optional AgentHome (lib/home.js). The persona event stays
     // authoritative for identity; the home only overrides the system prompt and
     // adds skills, re-read every turn so an edit lands on the next message.
-    // Absent — the default, and what every test and the browser do — nothing
+    // Absent (the default, and what every test and the browser do), nothing
     // here touches a filesystem at all.
     this.home = opts.home ?? null
 
@@ -82,7 +82,7 @@ class Agent extends EventEmitter {
       bootstrap: opts.bootstrap ?? null
     })
 
-    // Who may spend the owner's key. `null` means anyone — the default, because
+    // Who may spend the owner's key. `null` means anyone (the default), because
     // the relay's channels are the access control that already exists and an
     // agent invited to a channel is meant to answer the people in it. An
     // allowlist is opt-in, configured on the author-only persona (kind 30175)
@@ -96,7 +96,7 @@ class Agent extends EventEmitter {
     this.historyLimit = opts.historyLimit ?? 12
     this.maxHops = opts.maxHops ?? DEFAULT_MAX_HOPS
     this.queues = new Map() // channelId -> { pending: [], running: boolean }
-    this.handled = [] // recent trigger keys, newest last — see _triggerKey
+    this.handled = [] // recent trigger keys, newest last; see _triggerKey
     this.handledLimit = opts.handledLimit ?? 256
     this.channels = new Set()
     this.started = false
@@ -106,9 +106,9 @@ class Agent extends EventEmitter {
    * Report a non-fatal error.
    *
    * A bare `emit('error')` with no listener throws, which would turn a relay
-   * hiccup or a shutdown race into a crashed process. An agent is a long-lived
-   * background participant: it records the failure and keeps going, and callers
-   * that care can attach a listener.
+   * hiccup or a shutdown race into a crashed process. An agent is long-lived,
+   * so it records the failure and keeps going. Callers that care can attach a
+   * listener.
    */
   _raise (err) {
     this.lastError = err
@@ -133,9 +133,9 @@ class Agent extends EventEmitter {
     // Mentions cannot be watched with one global subscription: channel-scoped
     // events are delivered only to subscriptions that name their channel, which
     // is the boundary that stops anyone draining private channels. So the agent
-    // learns which channels it belongs to from membership notifications —
-    // which are community-global precisely so a client can bootstrap without
-    // knowing any channel id in advance — and then subscribes per channel.
+    // learns which channels it belongs to from membership notifications (they
+    // are community-global so a client can bootstrap without knowing any
+    // channel id in advance) and then subscribes per channel.
     //
     // The historical batch replays every past add/remove, so a restart
     // reconstructs the full channel set before EOSE.
@@ -150,8 +150,8 @@ class Agent extends EventEmitter {
 
   /**
    * Publish the agent's kind-10100 profile: who owns it, what runtime it uses,
-   * and what it can actually do. This is the discovery surface — "who on this
-   * relay can transcribe audio?" is a filter query, not an API call.
+   * and what it can actually do. This is the discovery surface: asking who on
+   * this relay can transcribe audio is a filter query.
    */
   async publishProfile () {
     const capabilities = await this.provider.capabilities()
@@ -167,8 +167,8 @@ class Agent extends EventEmitter {
       sdkVersion: this.persona?.sdk_version ?? null
     })
 
-    // Attach the owner attestation when there is one, so every action this
-    // agent takes carries provenance without pretending to be the owner.
+    // Attach the owner attestation when there is one, so the profile carries
+    // provenance without pretending to be the owner.
     if (this.attestation !== null) event.tags.push(this.attestation)
     const signed = this.attestation === null
       ? event
@@ -196,9 +196,8 @@ class Agent extends EventEmitter {
     const channelId = core.channelId(event)
     if (channelId === null) return
 
-    // Only mentions are answered. Everything else in the channel is context the
-    // agent can read but should not react to — an agent that replies to every
-    // message is a chat bot, not a teammate.
+    // Only mentions are answered. The channel subscription already filters on
+    // the agent's pubkey; this check keeps that rule explicit.
     if (!core.referencedPubkeys(event).includes(this.pubkey)) return
 
     // Set membership, before anything is queued and long before a token is
@@ -221,16 +220,16 @@ class Agent extends EventEmitter {
 
     // The loop guard. See HOP_TAG above: this is the only thing that stops two
     // agents that mention each other, and it must come before the queue, not
-    // inside the turn — a dropped mention must cost nothing at all.
+    // inside the turn, because a dropped mention must cost nothing at all.
     const hop = hopOf(event)
     if (hop >= this.maxHops) {
       this.emit('hop-limit', event, channelId, hop)
       return
     }
 
-    // One piece of work, answered once. A delegation lands twice by design — as
+    // One piece of work, answered once. A delegation lands twice by design: as
     // the chat message the delegate is mentioned in, and as the kind-43001 job
-    // request that is the machine-readable half of the same act — and answering
+    // request that is the machine-readable half of the same act. Answering
     // both produced two identical replies to the same person. Keyed on the event
     // id the job request names, so the collapse is exact rather than a guess at
     // similar content, and order-independent: whichever arrives second is the
@@ -346,7 +345,7 @@ class Agent extends EventEmitter {
       // the turn that produced it.
       if (final?.memo?.slug) await this._publish(events.engram(this.secretKey, final.memo))
 
-      // A provider may redirect the reply at a third party — that is the whole
+      // A provider may redirect the reply at a third party, which is the whole
       // delegation mechanism. Absent, the reply answers whoever asked, as before.
       const mentions = Array.isArray(final?.mentions) && final.mentions.length > 0
         ? final.mentions
@@ -381,8 +380,8 @@ class Agent extends EventEmitter {
         content: reply.id
       })
 
-      // Turn metrics are encrypted to the owner in production and p-gated
-      // either way, so cost and latency stay between agent and owner.
+      // Turn metrics are p-gated, so cost and latency are delivered only to the
+      // owner. The content is plain JSON.
       if (this.owner !== null) {
         await this.connection.publish(events.turnMetric(this.secretKey, {
           owner: this.owner,
@@ -411,7 +410,7 @@ class Agent extends EventEmitter {
     }
   }
 
-  /** Recent channel messages plus this batch, as provider-shaped turns. */
+  /** The system prompt (from the agent home, else the persona) plus this batch, as provider-shaped turns, capped at `historyLimit`. */
   async _buildHistory (channelId, batch) {
     const history = []
 
@@ -454,7 +453,7 @@ class Agent extends EventEmitter {
    * `RelayConnection.publish` resolves with the relay's OK frame whether or not
    * it was accepted, so a rate-limited reply used to vanish while the turn went
    * on to emit a kind-43004 job result pointing at an event the relay never
-   * stored — an audit log claiming work that does not exist. Measured: 80
+   * stored, which is an audit log claiming work that does not exist. Measured: 80
    * publishes, 22 refused, 0 raised. A turn that could not say what it worked
    * out is a failed turn, and the catch in `turn()` records it as 43006.
    */

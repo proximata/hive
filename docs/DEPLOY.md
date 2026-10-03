@@ -126,7 +126,7 @@ ExecStart=/opt/hive/hive relay --host 0.0.0.0 --port 3000 \
 Redeploy is the `Build and ship` recipe above plus a restart:
 
 ```sh
-npm test && npm run demo:tui -- --demo     # 226/226 and 16/16 before shipping anything
+npm test && npm run demo:tui -- --demo     # every test and 16/16 demo scenes before shipping anything
 npm run make:linux-x64
 gzip -9 -c out/linux-x64/hive > /tmp/hive.gz
 scp /tmp/hive.gz beecomb-relay.exe.xyz:/tmp/

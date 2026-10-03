@@ -7,9 +7,9 @@ const path = require('bare-path')
 const core = require('hive-core')
 
 // A frozen NIP-01 vector. The private key and template come from nostr-tools'
-// own fixtures; the id was cross-checked against an independent Python
-// implementation of the canonical serialization, so this pins interop rather
-// than merely pinning our own output.
+// own fixtures. The id was cross-checked against an independent Python
+// implementation of the canonical serialization, so this pins interop with
+// other implementations.
 const VECTOR = {
   secretKey: 'd217c1ff2f8a65c3e3a1740db3b9f58b8c848bb45e26d00ed4714e4a0f4ceecf',
   pubkey: '6af0f9de588f2c53cedcba26c5e2402e0d0aa64ec7b47c9f8d97b5bc562bab5f',
@@ -79,7 +79,7 @@ test('verify rejects a tampered event', (t) => {
   t.is(result.ok, false)
   t.ok(result.reason.includes('id does not match'), 'caught by id recomputation')
 
-  // Re-derive the id so the tamper survives the hash check — the signature
+  // Re-derive the id so the tamper survives the hash check. The signature
   // must still fail, which proves the two checks are independent.
   const reIded = { ...contentTampered }
   reIded.id = core.getEventHash(reIded)

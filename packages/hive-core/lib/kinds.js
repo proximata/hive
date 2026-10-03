@@ -180,8 +180,8 @@ const KIND_GIT_REPO_STATE = 30618
 
 // ------------------------------------------------------------ access classes --
 
-// Only the author may learn these exist — not their count, tags, content, or
-// search hits. See SPEC.md §2.3.
+// Visible only to the author, including their existence, count, tags, content
+// and search hits. See SPEC.md §2.3.
 const AUTHOR_ONLY_KINDS = [
   KIND_EVENT_REMINDER,
   KIND_PUSH_LEASE,
@@ -199,8 +199,8 @@ const P_GATED_KINDS = [
   KIND_AGENT_TURN_METRIC
 ]
 
-// Even a reader who knows the id must match #p — closes the kindless {ids:[…]}
-// read path for events whose existence must not leak.
+// Even a reader who knows the id must match #p. This closes the kindless
+// {ids:[…]} read path for events whose existence must not leak.
 const RESULT_GATED_KINDS = [KIND_DM_VISIBILITY, KIND_AGENT_TURN_METRIC]
 
 // Author-only unless the event carries exactly ["shared","true"].
@@ -305,10 +305,10 @@ function requiresChannel (kind) {
 /**
  * True when the event carries exactly one `["shared", "true"]` tag.
  *
- * Kind-agnostic and fails closed on any non-exact shape: a three-element
- * `["shared","true","x"]` is NOT shared, and neither is `["shared","yes"]`.
- * Ingest enforces the same shape, so a stored event either has no shared tag or
- * exactly one well-formed one — but this helper does not rely on that.
+ * Kind-agnostic. Fails closed on any non-exact shape, so `["shared","true","x"]`
+ * and `["shared","yes"]` are not shared. Ingest enforces the same shape, so a
+ * stored event has no shared tag or exactly one well-formed one, but this
+ * helper does not rely on that.
  */
 function eventIsShared (event) {
   let count = 0

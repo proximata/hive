@@ -9,8 +9,8 @@
 // why `hive demo` could not ship in the standalone binary.
 //
 // The `#qvac-sdk` import in package.json therefore lists this file as a
-// fallback after the real SDK. Resolution now always succeeds — against the
-// SDK when it is installed, against this module when it is not — and throwing
+// fallback after the real SDK. Resolution now always succeeds (against the
+// SDK when it is installed, against this module when it is not), and throwing
 // from the top level keeps the runtime behaviour identical to the missing
 // module it replaces.
 

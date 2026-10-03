@@ -5,8 +5,8 @@ const { sha256, toHex } = require('hive-core')
 
 // Tamper-evident append-only log. Each entry's hash covers the previous entry's
 // hash, so editing any row invalidates that row and every row after it. The
-// chain is only worth anything if the preimage is byte-reproducible, hence the
-// fixed field order and the sorted-key JSON below.
+// preimage must be byte-reproducible, so the field order is fixed and the JSON
+// below uses sorted keys.
 
 const GENESIS_HASH = '0'.repeat(64)
 
@@ -49,8 +49,8 @@ function uint32BE (n) {
 }
 
 /**
- * The hash preimage, in a fixed order. A channel id contributes 16 bytes — its
- * UTF-8 bytes truncated or zero-padded — so a present and an absent channel can
+ * The hash preimage, in a fixed order. A channel id contributes 16 bytes (its
+ * UTF-8 bytes, truncated or zero-padded), so a present and an absent channel can
  * never collide.
  */
 function entryHash (entry) {
