@@ -4,15 +4,16 @@ const DHT = require('hyperdht')
 const b4a = require('b4a')
 
 const { sha256, fromHex, toHex, LIMITS } = require('hive-core')
+const { Transport, TransportClient } = require('./transport')
 
 // The Pears half of reachability.
 //
 // The relay listens on a HyperDHT keypair derived from its Nostr secret key, so
-// its Nostr pubkey doubles as its dial address: `hyper://<relay pubkey>`. No
-// ports, no DNS, no certificates, and it traverses NAT. Frames are the same
-// JSON the WebSocket transport carries, length-prefixed over the encrypted
-// Noise stream — which is why the entire protocol test suite runs unchanged
-// over both.
+// one secret names both identities. Clients dial `hyper://<dht public key>`: the
+// DHT finds the relay and holepunches a Noise-encrypted stream, so the relay
+// needs no open port, DNS name or certificate. Frames are the same JSON the
+// WebSocket transport carries, length-prefixed over that stream, which is why
+// the protocol test suite runs unchanged over both.
 //
 // The Noise handshake authenticates the *transport*. NIP-42 still authenticates
 // the *Nostr identity* on top: two different claims, both required.
@@ -59,9 +60,17 @@ function encodeFrame (text) {
   return b4a.concat([header, payload])
 }
 
-class SwarmTransport {
+class SwarmTransport extends Transport {
+  /**
+   * @param {import('../relay').Relay} relay
+   * @param {object} [opts]
+   * @param {object} [opts.keyPair]  DHT keypair. Defaults to one derived from the relay secret.
+   * @param {object} [opts.dht]  An existing HyperDHT node. When omitted the transport creates and destroys its own.
+   * @param {Array} [opts.bootstrap]  Bootstrap nodes for a node the transport creates.
+   */
   constructor (relay, opts = {}) {
-    this.relay = relay
+    super(relay, opts)
+
     this.keyPair = opts.keyPair ?? swarmKeyPair(relay.secretKey)
     this.publicKey = toHex(this.keyPair.publicKey)
     this.dht = opts.dht ?? new DHT({ bootstrap: opts.bootstrap })
@@ -72,6 +81,10 @@ class SwarmTransport {
 
   get link () {
     return 'hyper://' + this.publicKey
+  }
+
+  describe () {
+    return { publicKey: this.publicKey }
   }
 
   async listen () {
@@ -97,29 +110,25 @@ class SwarmTransport {
   _onstream (stream) {
     this.streams.add(stream)
 
-    const connection = this.relay.connect({
+    const session = this.accept({
       send: (frame) => {
         stream.write(encodeFrame(frame))
         return true
       },
       close: () => stream.end(),
-      remote: toHex(stream.remotePublicKey ?? b4a.alloc(32)),
-      url: this.link
+      remote: toHex(stream.remotePublicKey ?? b4a.alloc(32))
     })
 
-    if (connection === null) {
+    if (session === null) {
       stream.end()
       this.streams.delete(stream)
       return
     }
 
     const reader = new FrameReader(
-      (frame) => {
-        Promise.resolve(connection.message(frame)).catch((err) => this.relay.emit('error', err))
-      },
+      (frame) => session.receive(frame),
       (err) => {
-        this.relay.emit('connection-error', err, connection)
-        connection.close(err.message)
+        session.fail(err)
         stream.destroy()
       }
     )
@@ -128,7 +137,7 @@ class SwarmTransport {
 
     const done = () => {
       this.streams.delete(stream)
-      connection.close('transport closed')
+      session.closed()
     }
     stream.on('close', done)
     stream.on('end', done)
@@ -136,20 +145,26 @@ class SwarmTransport {
   }
 }
 
-/** Client side: dial a relay by its public key and speak the same framing. */
-class SwarmClient {
+/** Client side: dial a relay by its DHT public key (`hyper://<hex>` or raw bytes) and speak the same framing. */
+class SwarmClient extends TransportClient {
   constructor (opts = {}) {
+    super(opts)
+
     this.dht = opts.dht ?? new DHT({ bootstrap: opts.bootstrap })
     this.ownsDht = opts.dht === undefined
     this.stream = null
   }
 
-  async connect (publicKey, { onframe, onclose } = {}) {
-    const key = typeof publicKey === 'string'
-      ? fromHex(publicKey.replace(/^hyper:\/\//, ''))
-      : publicKey
+  async connect (address, { onframe, onclose } = {}) {
+    const key = typeof address === 'string'
+      ? fromHex(address.replace(/^hyper:\/\//, ''))
+      : address
 
     const stream = this.dht.connect(b4a.from(key))
+    // An error is always followed by 'close', which is where cleanup happens.
+    // Without a listener the relay dropping this peer (a reset) would be thrown
+    // as an uncaught exception.
+    stream.on('error', () => {})
     await stream.opened
 
     const reader = new FrameReader(
@@ -160,7 +175,6 @@ class SwarmClient {
     stream.on('close', () => onclose?.())
 
     this.stream = stream
-    return stream
   }
 
   send (frame) {

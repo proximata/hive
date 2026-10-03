@@ -73,7 +73,7 @@ bin.mjs ─────► app.js ─────► workers/main.js          (h
 `hive-sdk` and `hive-workflow` depend on `hive-core` only. `hive-relay` is the only server package
 that imports other services (auth and store), and the worker hands it the workflow engine. The
 clients `hive-cli` and `hive-agent` build on `hive-sdk`; `hive-agent` also imports `hive-relay` for
-the protocol parser and the swarm transport client.
+the protocol parser and the transport registry.
 
 ---
 
@@ -315,10 +315,12 @@ deliberate NIP-01 reading carried over from Buzz, and such subscriptions are nev
 
 ### 3.4 Transports
 
-Both client transports carry the same JSON text frames, and the protocol engine cannot tell them
-apart.
+Every client-facing transport carries the same JSON text frames, and the protocol engine cannot tell
+them apart. Transports share one interface and are chosen by registry name (`hive relay --transport
+ws,swarm`); `--no-swarm` removes `swarm` from the list and `--replicate <group>` adds `replication`.
+[docs/transports.md](docs/transports.md) describes the interface and how to add one.
 
-**A. WebSocket + HTTP.** `bare-ws` attached to a `bare-http1` server so one port serves both.
+**A. WebSocket + HTTP** (`ws`). `bare-ws` attached to a `bare-http1` server so one port serves both.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -344,7 +346,7 @@ alone and `GET /` keeps answering `426 upgrade_required`. When one is configured
 served read-only, by allow-listed extension, and never under `/api/`, so nothing on disk can
 shadow an endpoint. The bind address is not part of this contract; it defaults to loopback.
 
-**B. HyperDHT.** The relay listens on a HyperDHT keypair **derived from its Nostr secret
+**B. HyperDHT** (`swarm`). The relay listens on a HyperDHT keypair **derived from its Nostr secret
 key** (the seed is `sha256("hive:swarm:v1" ‖ secret)`), so one secret names both identities. Clients
 dial the DHT public key, which is not the Nostr pubkey:
 
@@ -358,7 +360,10 @@ authenticates the *transport*; NIP-42 authenticates the *Nostr identity* on top.
 claims and both are required. A relay is addressed by key, so Hyperswarm topic discovery is not
 used.
 
-**C. Replication.** Relay to relay, not client to relay. With `--replicate <group>` each relay appends every event it accepted from a client to
+**C. Loopback** (`loopback`). In-process, for tests and as the smallest example of the interface.
+
+**D. Replication** (`replication`). Relay to relay, not client to relay, so it has no client half and
+no URL scheme. With `--replicate <group>` each relay appends every event it accepted from a client to
 its own Hypercore, joins a Hyperswarm topic derived from the group name, and reads each peer's core
 through the same validate-then-store path a WebSocket `EVENT` takes. SQLite stays the store. Relay-signed
 kinds are never taken from a peer; each relay regenerates them from the client-signed command that
@@ -780,11 +785,12 @@ Hive follows the `hello-pear-bare` shape:
 
 ```
 bin.mjs          flags: --version --storage <dir> --no-updates --host --port --public-url --web-dir
-                 --no-swarm --bootstrap --replicate
+                 --no-swarm --transport --bootstrap --replicate
    ↓
 app.js           ready-resource; PearRuntime.run(workers/main.js, [...]); IPC via FramedStream
    ↓
-workers/main.js  constructs PearRuntime (OTA), opens the Store, starts the Relay, joins the swarm
+workers/main.js  constructs PearRuntime (OTA), opens the Store, starts the Relay and the selected
+                 transports
 ```
 
 - `pear touch` mints the `pear://` upgrade link recorded in `package.json:upgrade`. The value in this
@@ -802,8 +808,9 @@ workers/main.js  constructs PearRuntime (OTA), opens the Store, starts the Relay
 
 ## 10. Status
 
-**Built**: relay core (NIP-01, 09, 11, 16, 25, 29, 33, 42, 45, 50, 98), the `ws` and `swarm`
-transports, relay-to-relay replication (opt-in with `--replicate`), SQLite store with inverted-index search, hash-chain
+**Built**: relay core (NIP-01, 09, 11, 16, 25, 29, 33, 42, 45, 50, 98), the `ws`, `swarm` and
+`loopback` transports behind one interface, relay-to-relay replication (`replication`, opt-in with
+`--replicate`), SQLite store with inverted-index search, hash-chain
 audit, channels, threads, DMs, reactions, presence, typing and canvas, agent identity (personas,
 teams, attestation, engrams), a QVAC provider with mock and SDK adapters, the workflow engine
 including approval gates, the CLI, and Pear packaging scripts.

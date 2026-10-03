@@ -150,6 +150,42 @@ function resolveReplication (flags = {}, env = {}) {
   return topic
 }
 
+const DEFAULT_TRANSPORTS = ['ws', 'swarm']
+
+/**
+ * Resolve which transports the relay runs, as registry names, in start order.
+ *
+ * Without `--transport` the default is `ws,swarm`; `--no-swarm` drops `swarm`
+ * from whatever list results. Replication is not a separate switch: a group
+ * name from `--replicate` (resolved by resolveReplication) adds `replication`,
+ * and naming `replication` without a group is an error, because it has no
+ * topic to join.
+ *
+ * Only the shape of each name is checked here. This module stays free of the
+ * transport code so the host process never loads a DHT; the worker checks the
+ * names against the registry at startup and refuses to boot on an unknown one.
+ */
+function resolveTransports (flags = {}, { replicate = null } = {}) {
+  let ids = flags.transport === undefined
+    ? [...DEFAULT_TRANSPORTS]
+    : one(flags.transport, null, null, '--transport').split(',').map((id) => id.trim())
+
+  for (const id of ids) {
+    if (!/^[a-z][a-z0-9-]*$/.test(id)) {
+      throw new Error(`--transport must be a comma-separated list of transport names, got ${JSON.stringify(id)}`)
+    }
+  }
+
+  if (flags.swarm === false) ids = ids.filter((id) => id !== 'swarm')
+
+  if (replicate !== null && !ids.includes('replication')) ids.push('replication')
+  if (replicate === null && ids.includes('replication')) {
+    throw new Error('the replication transport needs a group: pass --replicate <group>')
+  }
+
+  return [...new Set(ids)]
+}
+
 /** First supplied value, rejecting the shapes parseArgs produces for a flag with no argument. */
 function one (flag, fromEnv, fallback, label) {
   const value = flag ?? fromEnv ?? fallback
@@ -159,4 +195,4 @@ function one (flag, fromEnv, fallback, label) {
   return value
 }
 
-module.exports = { resolveBind, resolveBootstrap, resolveReplication, isLoopback, DEFAULT_HOST, DEFAULT_PORT }
+module.exports = { resolveBind, resolveBootstrap, resolveReplication, resolveTransports, isLoopback, DEFAULT_HOST, DEFAULT_PORT, DEFAULT_TRANSPORTS }

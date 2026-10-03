@@ -6,10 +6,9 @@ const protocol = require('./lib/protocol')
 const handlers = require('./lib/handlers')
 const { MediaStore } = require('./lib/media')
 const { MAX_AUDIT_ENTRIES } = require('./lib/rest')
-const { WebSocketTransport } = require('./lib/transports/ws')
-const { SwarmTransport } = require('./lib/transports/swarm')
-const { ReplicationTransport, replicationKeyPair, replicationTopic } = require('./lib/transports/replication')
-const { resolveBind, resolveBootstrap, resolveReplication, isLoopback, DEFAULT_HOST, DEFAULT_PORT } = require('./lib/bind')
+const transports = require('./lib/transports')
+const { replicationKeyPair, replicationTopic } = require('./lib/transports/replication')
+const { resolveBind, resolveBootstrap, resolveReplication, resolveTransports, isLoopback, DEFAULT_HOST, DEFAULT_PORT } = require('./lib/bind')
 
 module.exports = {
   Relay,
@@ -22,14 +21,18 @@ module.exports = {
   protocol,
   handlers,
   MediaStore,
-  WebSocketTransport,
-  SwarmTransport,
-  ReplicationTransport,
+  transports,
+  Transport: transports.Transport,
+  TransportClient: transports.TransportClient,
+  WebSocketTransport: transports.WebSocketTransport,
+  SwarmTransport: transports.SwarmTransport,
+  ReplicationTransport: transports.ReplicationTransport,
   replicationKeyPair,
   replicationTopic,
   resolveBind,
   resolveBootstrap,
   resolveReplication,
+  resolveTransports,
   isLoopback,
   DEFAULT_HOST,
   DEFAULT_PORT

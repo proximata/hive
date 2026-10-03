@@ -61,9 +61,9 @@ const RATE_LIMIT_SWEEP_MS = 60000
 let nextConnId = 1
 
 /**
- * One client connection, independent of how its bytes arrive. A WebSocket and
- * a HyperDHT stream produce exactly the same object, so the protocol engine
- * does not know which transport carries a given peer.
+ * One client connection, independent of how its bytes arrive. Every transport
+ * hands the relay the same object (see transports/transport.js), so the
+ * protocol engine does not know which transport carries a given peer.
  */
 class Connection {
   constructor (relay, opts) {

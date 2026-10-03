@@ -4,7 +4,7 @@ const test = require('brittle')
 const core = require('hive-core')
 
 const { openStore } = require('hive-store')
-const { Relay, WebSocketTransport, resolveBind, resolveBootstrap, MAX_FILTERS_PER_REQ, MAX_CREATED_AT_DRIFT_S, MAX_AUDIT_ENTRIES } = require('hive-relay')
+const { Relay, WebSocketTransport, resolveBind, resolveBootstrap, resolveTransports, MAX_FILTERS_PER_REQ, MAX_CREATED_AT_DRIFT_S, MAX_AUDIT_ENTRIES } = require('hive-relay')
 const { MAX_PUT_USER_TARGETS } = require('hive-relay').handlers
 const { buildAuthEvent, buildNip98Header } = require('hive-auth')
 
@@ -360,7 +360,7 @@ test('readiness reports the store, not a flag', async (t) => {
 
 // The regression this guards: a relay that binds 0.0.0.0 by default puts a
 // write endpoint on every dev's LAN, silently, with nothing on screen to say
-// so. Assert the default at both levels — the flag resolver bin.mjs calls, and
+// so. Assert the default at both levels: the flag resolver bin.mjs calls, and
 // the socket the transport actually opens.
 
 test('the default bind is loopback and only --host widens it', (t) => {
@@ -418,6 +418,26 @@ test('--bootstrap defaults to undefined and rejects malformed addresses', (t) =>
   t.exception(() => resolveBootstrap({ bootstrap: '192.168.1.10:49737,' }, {}), /--bootstrap entries must be host:port/, 'a trailing comma is a typo, not an empty entry')
   t.exception(() => resolveBootstrap({ bootstrap: 'host:70000' }, {}), /--bootstrap port must be 1-65535/)
   t.exception(() => resolveBootstrap({ bootstrap: 'ho st:1234' }, {}), /--bootstrap entries must be host:port/)
+})
+
+// The default list is what a deployment that never passes --transport runs, so
+// a change to it changes every such deployment. --no-swarm and --replicate
+// stay the switches they were before there was a list.
+test('--transport defaults to ws,swarm, and --no-swarm and --replicate adjust it', (t) => {
+  t.alike(resolveTransports({}), ['ws', 'swarm'])
+  t.alike(resolveTransports({ swarm: false }), ['ws'], '--no-swarm drops swarm')
+  t.alike(resolveTransports({}, { replicate: 'hive' }), ['ws', 'swarm', 'replication'], '--replicate adds replication')
+  t.alike(resolveTransports({ swarm: false }, { replicate: 'hive' }), ['ws', 'replication'])
+
+  t.alike(resolveTransports({ transport: 'swarm' }), ['swarm'], 'an explicit list is taken at its word')
+  t.alike(resolveTransports({ transport: 'ws, loopback' }), ['ws', 'loopback'], 'whitespace trimmed')
+  t.alike(resolveTransports({ transport: 'ws,ws,swarm' }), ['ws', 'swarm'], 'duplicates collapse')
+  t.alike(resolveTransports({ transport: 'ws,replication' }, { replicate: 'hive' }), ['ws', 'replication'], 'naming replication with a group is fine')
+
+  t.exception(() => resolveTransports({ transport: 'ws,replication' }), /replication transport needs a group/)
+  t.exception(() => resolveTransports({ transport: true }), /--transport requires a value/)
+  t.exception(() => resolveTransports({ transport: 'ws,,swarm' }), /--transport must be a comma-separated list/)
+  t.exception(() => resolveTransports({ transport: 'WS' }), /--transport must be a comma-separated list/)
 })
 
 test('the transport opens a loopback socket when no host is given', async (t) => {

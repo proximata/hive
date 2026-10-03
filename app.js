@@ -3,14 +3,15 @@
 const ReadyResource = require('ready-resource')
 const FramedStream = require('framed-stream')
 
+const { resolveTransports } = require('hive-relay/lib/bind.js')
+
 /**
  * The host half of the hello-pear-bare shape.
  *
  * It spawns the Bare worker that owns the peer-to-peer code and the updater,
  * wraps the IPC pipe in length-prefixed framing, and turns the worker's
  * messages into events `bin.mjs` can print. Keeping the peer-to-peer work off
- * this thread is what lets the CLI stay responsive while the swarm does its
- * thing.
+ * this thread keeps the CLI responsive.
  */
 class App extends ReadyResource {
   constructor (opts = {}) {
@@ -26,12 +27,13 @@ class App extends ReadyResource {
     this.port = opts.port ?? 3000
     this.publicUrl = opts.publicUrl ?? null
     this.webDir = opts.webDir ?? null
-    this.swarm = opts.swarm !== false
-    // undefined, not [], means "hyperdht's public bootstrap nodes" — see
+    // undefined, not [], means "hyperdht's public bootstrap nodes"; see
     // resolveBootstrap in packages/hive-relay/lib/bind.js.
     this.bootstrap = opts.bootstrap ?? undefined
-    // null, not '', means relay-to-relay replication is off — the default.
+    // null, not '', means relay-to-relay replication is off (the default).
     this.replicate = opts.replicate ?? null
+    // Registry names, in start order. `swarm: false` is the --no-swarm switch.
+    this.transports = opts.transports ?? resolveTransports({ swarm: opts.swarm }, { replicate: this.replicate })
 
     this.url = null
     this.link = null
@@ -52,7 +54,7 @@ class App extends ReadyResource {
       this.dir,
       this.app ?? '',
       String(this.port),
-      String(this.swarm),
+      this.transports.join(','),
       // Appended, never inserted: the worker destructures Bare.argv
       // positionally, so a new argument in the middle would silently shift
       // every later one.
@@ -77,19 +79,19 @@ class App extends ReadyResource {
     }
 
     switch (message.type) {
-      case 'listening':
-        this.url = message.url
-        this.emit('listening', message)
-        break
-
-      case 'swarm':
-        this.link = message.link
-        this.emit('swarm', message)
-        break
-
-      case 'replication':
-        this.feed = message.feed
-        this.emit('replication', message)
+      case 'transport':
+        this.emit('transport', message)
+        // The built-in transports also keep an event of their own.
+        if (message.id === 'ws') {
+          this.url = message.url
+          this.emit('listening', message)
+        } else if (message.id === 'swarm') {
+          this.link = message.link
+          this.emit('swarm', message)
+        } else if (message.id === 'replication') {
+          this.feed = message.feed
+          this.emit('replication', message)
+        }
         break
 
       case 'ready':
@@ -123,6 +125,7 @@ class App extends ReadyResource {
     // Give the worker a moment to close its store cleanly before the process
     // tears the pipe down under it.
     await new Promise((resolve) => setTimeout(resolve, 100))
+
     try {
       this.IPC?.destroy()
     } catch {}

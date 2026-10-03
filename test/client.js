@@ -1,15 +1,12 @@
 'use strict'
 
-const ws = require('bare-ws')
-
 const { buildAuthEvent } = require('hive-auth')
-const { parseRelayMessage } = require('hive-relay').protocol
-const { SwarmClient } = require('hive-relay/lib/transports/swarm')
+const { protocol, transports } = require('hive-relay')
 
 // A minimal relay client used by the test suites. It buffers every relay
-// message so a test can assert on ordering (EVENT… then EOSE) rather than
-// racing it, and it speaks either transport behind one API — which is how the
-// same protocol suite runs twice.
+// message so a test can assert on ordering (EVENT then EOSE) rather than
+// racing it. It dials through the transport registry, so the same suites can
+// run against any registered transport.
 
 const DEFAULT_TIMEOUT = 5000
 
@@ -23,41 +20,38 @@ class TestClient {
     this._close = null
   }
 
-  static async openWebSocket ({ port, host = '127.0.0.1' }) {
+  /**
+   * Dial `address` through the transport registry and wait for the NIP-42
+   * challenge. `opts` go to the transport client (for example `bootstrap`).
+   */
+  static async open (address, opts = {}) {
     const client = new TestClient()
-    const socket = new ws.Socket({ port, host })
+    const transport = transports.createClient(address, opts)
 
-    socket.on('data', (data) => client._receive(data.toString()))
-    socket.on('close', () => { client.closed = true })
-    socket.on('error', () => { client.closed = true })
+    await transport.connect(address, {
+      onframe: (frame) => client._receive(frame),
+      onclose: () => { client.closed = true }
+    })
 
-    client._send = (frame) => socket.write(frame)
-    client._close = () => socket.end()
+    client._send = (frame) => transport.send(frame)
+    client._close = () => transport.close()
 
     await client.waitFor((m) => m.type === 'AUTH')
     return client
   }
 
-  static async openSwarm ({ publicKey, bootstrap }) {
-    const client = new TestClient()
-    const swarm = new SwarmClient({ bootstrap })
+  static openWebSocket ({ port, host = '127.0.0.1' }) {
+    return TestClient.open(`ws://${host}:${port}`)
+  }
 
-    await swarm.connect(publicKey, {
-      onframe: (frame) => client._receive(frame),
-      onclose: () => { client.closed = true }
-    })
-
-    client._send = (frame) => swarm.send(frame)
-    client._close = () => swarm.close()
-
-    await client.waitFor((m) => m.type === 'AUTH')
-    return client
+  static openSwarm ({ publicKey, bootstrap }) {
+    return TestClient.open('hyper://' + publicKey, { bootstrap })
   }
 
   _receive (raw) {
     let message
     try {
-      message = parseRelayMessage(raw)
+      message = protocol.parseRelayMessage(raw)
     } catch {
       return
     }
