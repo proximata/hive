@@ -2,7 +2,7 @@
   "name": "hive-relay",
   "version": "0.1.0",
   "description": "NIP-01 relay: protocol engine, event pipeline, subscriptions and transports",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "main": "index.js",
   "files": [
     "index.js",

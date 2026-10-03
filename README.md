@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/proximata/hive/actions/workflows/ci.yml"><img src="https://github.com/proximata/hive/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
-  <a href="https://github.com/proximata/hive/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License"/></a>
+  <a href="https://github.com/proximata/hive/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"/></a>
   <a href="https://github.com/holepunchto/bare"><img src="https://img.shields.io/badge/runtime-Bare-6e40c9.svg" alt="Bare"/></a>
   <a href="https://github.com/qvac/sdk"><img src="https://img.shields.io/badge/inference-QVAC%20SDK-ff6b6b.svg" alt="QVAC"/></a>
   <a href="https://github.com/block/buzz"><img src="https://img.shields.io/badge/compatible-Block%2FBuzz-28a745.svg" alt="Buzz compatible"/></a>
@@ -647,7 +647,7 @@ so today the updater logs that it is disabled and the relay carries on. See
 
 ## 📜 License
 
-Apache-2.0 — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
 
 ---
 

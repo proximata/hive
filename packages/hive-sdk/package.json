@@ -2,7 +2,7 @@
   "name": "hive-sdk",
   "version": "0.1.0",
   "description": "Typed Nostr event builders for Hive",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "main": "index.js",
   "files": [
     "index.js",

@@ -2,7 +2,7 @@
   "name": "hive-agent",
   "version": "0.1.0",
   "description": "Agent harness: mention loop, persona instantiation and the QVAC inference adapter",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "main": "index.js",
   "files": [
     "index.js",

@@ -11,7 +11,7 @@
   },
   "version": "0.1.0",
   "description": "A hive mind communication platform on the Bare runtime: Nostr relay, agents, workflows",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "type": "commonjs",
   "upgrade": "pear://replace-with-pear-touch-output",
   "workspaces": [
