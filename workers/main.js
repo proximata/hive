@@ -272,5 +272,8 @@ function loadOrCreateKey (file) {
 
 main().catch((err) => {
   say('error', { message: err.message, stack: err.stack })
-  Bare.exit(1)
+  // Let the pipe flush the message before this thread ends; exiting at once
+  // made a startup failure (an unknown --transport, a bad --web-dir) exit
+  // without a word.
+  setTimeout(() => Bare.exit(1), 50)
 })
