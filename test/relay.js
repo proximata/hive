@@ -358,6 +358,20 @@ test('readiness reports the store, not a flag', async (t) => {
 
 // ------------------------------------------------------------- bind host --
 
+test('NIP-42 relay URLs compare by host and stay fast on a long run of slashes', (t) => {
+  const { sameRelay } = require('hive-auth')
+
+  t.ok(sameRelay('ws://relay.example:3000', 'http://relay.example:3000/'), 'scheme and trailing slash are cosmetic')
+  t.ok(sameRelay('relay.example///', 'relay.example'), 'a value that is not a URL falls back to its text')
+  t.absent(sameRelay('ws://a.example', 'ws://b.example'), 'the host stays exact')
+
+  // The trailing-slash strip used to be a regex that retries from every slash
+  // in the run: quadratic in a value the client chooses.
+  const started = Date.now()
+  t.absent(sameRelay('/'.repeat(30000) + 'x', 'relay.example'))
+  t.ok(Date.now() - started < 250, 'thirty thousand slashes do not stall the comparison')
+})
+
 // The regression this guards: a relay that binds 0.0.0.0 by default puts a
 // write endpoint on every dev's LAN, silently, with nothing on screen to say
 // so. Assert the default at both levels: the flag resolver bin.mjs calls, and

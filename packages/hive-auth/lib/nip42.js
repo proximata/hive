@@ -18,6 +18,16 @@ function randomChallenge () {
 }
 
 /**
+ * Strip trailing slashes without a regex: `/\/+$/` retries from every slash in
+ * a long run, which is quadratic on input the client controls.
+ */
+function trimTrailingSlashes (value) {
+  let end = value.length
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end--
+  return value.slice(0, end)
+}
+
+/**
  * Compare relay URLs the way NIP-42 intends: scheme and trailing slashes are
  * cosmetic, the host is what matters. Ignoring the scheme keeps clients working
  * that connect over ws:// but were told about http://. The host comparison
@@ -32,7 +42,7 @@ function sameRelay (a, b) {
       const url = new URL(value.replace(/^ws/, 'http'))
       return url.host.toLowerCase()
     } catch {
-      return value.replace(/^\w+:\/\//, '').replace(/\/+$/, '').toLowerCase()
+      return trimTrailingSlashes(value.replace(/^\w+:\/\//, '')).toLowerCase()
     }
   }
 
