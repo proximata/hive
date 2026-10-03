@@ -30,7 +30,10 @@ class RelayConnection extends EventEmitter {
   }
 
   async connect () {
-    this.client = transports.createClient(this.url, { bootstrap: this.bootstrap })
+    // One client for the life of this connection, so a transport that holds
+    // resources (a DHT node, for example) keeps them across reconnects.
+    this.client ??= transports.createClient(this.url, { bootstrap: this.bootstrap })
+    this.challenge = null
 
     await this.client.connect(this.url, {
       onframe: (frame) => this._onframe(frame),
@@ -55,7 +58,8 @@ class RelayConnection extends EventEmitter {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('timed out waiting for the NIP-42 challenge')), 15000)
 
-      this.once('challenge', () => {
+      // The challenge can arrive before this runs, so check for it first.
+      const answer = () => {
         const event = buildAuthEvent({
           challenge: this.challenge,
           relayUrl: this.url,
@@ -73,7 +77,10 @@ class RelayConnection extends EventEmitter {
         })
 
         this._write(JSON.stringify(['AUTH', event]))
-      })
+      }
+
+      if (this.challenge !== null) answer()
+      else this.once('challenge', answer)
     })
   }
 

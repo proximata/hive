@@ -796,8 +796,8 @@ workers/main.js  constructs PearRuntime (OTA), opens the Store, starts the Relay
 
 - `pear touch` mints the `pear://` upgrade link recorded in `package.json:upgrade`. The value in this
   repository is a placeholder, so the updater reports `updater disabled` and the relay runs without OTA.
-- The updater emits `updating` → `updated`; the worker calls `applyUpdate()`. `--no-updates`
-  disables it for development.
+- The updater emits `updating` → `updated`; the worker awaits `applyUpdate()`. `--no-updates`
+  disables it for development. On shutdown the worker closes `pear-runtime` and tells the host.
 - `--storage <dir>` isolates instances, so several relays run side by side on one machine.
 - `npm run make:<platform>` runs `bare-build` for `linux-{x64,arm64}`, `darwin-{x64,arm64}` and
   `win32-{x64,arm64}`. The resulting binary needs no separate Node, Bare or Pear CLI install. These

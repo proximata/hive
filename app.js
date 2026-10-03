@@ -5,6 +5,10 @@ const FramedStream = require('framed-stream')
 
 const { resolveTransports } = require('hive-relay/lib/bind.js')
 
+// How long to wait for the worker to say it closed its transports, updater and
+// store before the pipe is torn down anyway.
+const CLOSE_TIMEOUT_MS = 5000
+
 /**
  * The host half of the hello-pear-bare shape.
  *
@@ -41,6 +45,7 @@ class App extends ReadyResource {
     this.pubkey = null
     this.IPC = null
     this.pipe = null
+    this._workerClosed = null
   }
 
   _open () {
@@ -94,6 +99,10 @@ class App extends ReadyResource {
         }
         break
 
+      case 'closed':
+        this._workerClosed?.()
+        break
+
       case 'ready':
         this.pubkey = message.pubkey
         this.emit('ready-relay', message)
@@ -117,14 +126,23 @@ class App extends ReadyResource {
   }
 
   async _close () {
+    // Wait for the worker to report that it closed its transports, updater and
+    // store. The timeout covers a worker that is stuck or already gone.
+    const closed = new Promise((resolve) => { this._workerClosed = resolve })
+
     try {
       this.pipe?.write(JSON.stringify({ type: 'close' }))
     } catch {
       // The worker may already be gone.
+      this._workerClosed()
     }
-    // Give the worker a moment to close its store cleanly before the process
-    // tears the pipe down under it.
-    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    let timer
+    await Promise.race([
+      closed,
+      new Promise((resolve) => { timer = setTimeout(resolve, CLOSE_TIMEOUT_MS) })
+    ])
+    clearTimeout(timer)
 
     try {
       this.IPC?.destroy()

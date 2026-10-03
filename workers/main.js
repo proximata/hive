@@ -189,10 +189,12 @@ async function main () {
 
   // ------------------------------------------------------------------ OTA --
 
+  let pear = null
+
   if (updates && typeof upgrade === 'string' && upgrade.startsWith('pear://')) {
     try {
       const PearRuntime = require('pear-runtime')
-      const pear = new PearRuntime({
+      pear = new PearRuntime({
         dir,
         version,
         upgrade,
@@ -203,10 +205,17 @@ async function main () {
 
       pear.on('error', (err) => say('error', { message: 'updater: ' + err.message }))
       pear.updater.on('updating', () => say('updating'))
-      pear.updater.on('updated', () => {
+      pear.updater.on('updated', async () => {
         say('updated')
-        pear.updater.applyUpdate()
-        say('update-applied')
+        // applyUpdate() is async: it swaps the staged binary in. Saying
+        // 'update-applied' before it resolves reported a swap that had not
+        // happened, and a failure surfaced as an unhandled rejection.
+        try {
+          await pear.updater.applyUpdate()
+          say('update-applied')
+        } catch (err) {
+          say('error', { message: 'updater: ' + err.message })
+        }
       })
 
       await pear.ready()
@@ -224,8 +233,21 @@ async function main () {
     say('closing')
     relay.close()
     for (const transport of active) await transport.close()
+
+    // pear-runtime opens a Corestore and a swarm of its own, and only close()
+    // releases them.
+    try {
+      await pear?.close()
+    } catch (err) {
+      say('error', { message: 'updater close: ' + err.message })
+    }
+
     store.close()
-    Bare.exit(0)
+    // The host waits for this instead of guessing how long a close takes.
+    say('closed')
+
+    // Let the pipe flush the last message before this thread ends.
+    setTimeout(() => Bare.exit(0), 50)
   }
 
   pipe.on('data', (data) => {
