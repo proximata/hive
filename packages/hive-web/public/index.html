@@ -79,6 +79,11 @@
     min-block-size: 0;
     display: grid;
     grid-template-columns: var(--col-nav) minmax(0, 1fr) var(--col-aside);
+    /* One explicit row that may shrink. An implicit auto row grows to the
+       tallest column's content (a long member list), which pushed the
+       composer and the members box below the viewport and the transcript
+       under the status bar. */
+    grid-template-rows: minmax(0, 1fr);
     gap: 0;
   }
 
@@ -87,6 +92,7 @@
      navigation. */
   #shell > .col {
     min-inline-size: 0;
+    min-block-size: 0;
     display: grid;
     grid-template-rows: 1fr minmax(6rem, 33%);
   }
@@ -210,6 +216,7 @@
   @media (max-width: 860px) {
     #shell {
       grid-template-columns: 1fr;
+      grid-template-rows: none;
       grid-auto-rows: minmax(12rem, auto);
       overflow-y: auto;
     }
