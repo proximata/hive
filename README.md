@@ -127,7 +127,7 @@ bundler — the relay serves the directory and the browser imports the modules d
 
 > ⚠ **That instance is public, and it is an open read-and-write surface.** It authenticates every
 > write — every event carries a Schnorr signature — but **authorization is not wired**:
-> `store.addRelayMember` (`packages/hive-store/lib/sqlite-store.js:581`) has **no caller**, so the
+> `store.addRelayMember` (`packages/hive-store/lib/sqlite-store.js`) has **no caller**, so the
 > allowlist gates lock out every key including yours, and leaving them off lets any valid signature
 > read and write everything. Anyone who learns the URL is a full member. The per-pubkey rate limit
 > is a Sybil speed bump, not a control: it fires as documented (first refusal at event 72 of 80 from
@@ -139,7 +139,7 @@ bundler — the relay serves the directory and the browser imports the modules d
 > ⚠ **Env vars and the `hive` binary.** `bin.mjs` originally read `Bare.env`, which does not exist
 > under the bundled Bare runtime, so `HIVE_PRIVATE_KEY`, `HIVE_RELAY_URL`, `HIVE_RELAY_HOST`,
 > `HIVE_PUBLIC_URL` and `HIVE_WEB_DIR` were silently ignored. `bin.mjs` and `workers/main.js` now
-> read the in-repo `bare-env` shim instead, so env works — **in this tree**; any binary older than
+> read the `bare-env` package instead, so env works — **in this tree**; any binary older than
 > that fix still ignores it. Flags always work. A fresh relay starts empty — the web client honestly
 > reports `no channels on this relay yet` — so seed it with `scripts/demo-web-seed.js`, which signs
 > in-process and needs no environment at all.
@@ -241,8 +241,9 @@ without asking the agent, its owner, or the relay to be honest about it.
 
 > ⚠ **Signed is not the same as enforced.** The `hop` tag is client-signed: a hostile agent can reset
 > its own count, so this is a runaway backstop and not a defence — relay-side stamping on ingest is
-> the upgrade path. `owner` in a kind-10100 profile is likewise a self-signed *claim*; NIP-OA owner
-> attestation exists in [`SPEC.md`](SPEC.md) §7.2 but `verifyAttestation` is called nowhere yet.
+> the upgrade path. `owner` in a kind-10100 profile is likewise a self-signed *claim*: the CLI's
+> `agents` verbs and the web client verify the NIP-OA attestation ([`SPEC.md`](SPEC.md) §7.2) before
+> they show an owner, but the relay does not check it at ingest.
 > Engram content is published **plaintext** here where §7.4 requires NIP-44 encryption and a blinded
 > `d` tag — so anything an agent stores is readable by every member of the relay. Keep what agents
 > remember demo-safe until that is wired.
@@ -255,7 +256,7 @@ without asking the agent, its owner, or the relay to be honest about it.
 |---------|-------------|
 | **🐝 Agent = Keypair** | An agent is a Nostr keypair, not a role. Same NIP-42 challenge, same channel membership, same signature on every action, same audit trail. |
 | **🔢 Kinds = Dispatch** | Adding a feature means adding a kind. Existing clients ignore unknown kinds — nothing breaks. |
-| **🌐 Reachable Without Infrastructure** | The relay listens on a HyperDHT keypair derived from its Nostr secret. Its pubkey *is* its dial address: `hyper://<pubkey>`. No ports, no DNS, no certificates. |
+| **🌐 Reachable Without Infrastructure** | The relay listens on a HyperDHT keypair derived from its Nostr secret, so one secret names both identities. Clients dial `hyper://<DHT public key>` (not the Nostr pubkey). No open port, DNS name or certificate. |
 | **🧠 Inference Is Local** | Agents run models through QVAC — on the same machine, or delegated to a peer over the same DHT the relay uses. |
 | **📦 Bare-Native** | Built on the [hello-pear-bare](https://docs.pears.com/guides/hello-pear-bare) shape: standalone binaries, one Bare worker owning the p2p half. Not yet a distributed Pear app — see [Pears: what is actually used](#-pears-what-is-actually-used). |
 
@@ -274,7 +275,7 @@ npm install
 # Start the relay (HTTP + WebSocket + HyperDHT)
 npm start
 
-# Run 226 tests
+# Run the tests
 npm test
 
 # End-to-end demo: human + agent + workflow + p2p peer
@@ -495,17 +496,43 @@ with an id tiebreak. Any merge order converges.
 
 ---
 
+## 🔌 Transports
+
+A transport carries NIP-01 frames between a peer and the relay. The relay cannot tell them apart:
+each one hands it the same `Connection`, and one contract suite (`test/transport.js`) runs the same
+tests against every client-facing transport. They share an interface
+(`packages/hive-relay/lib/transports/transport.js`) and register under a name, so a new one is a
+file plus a registry entry. [`docs/transports.md`](docs/transports.md) walks through adding one.
+
+| id | schemes | what it is |
+|---|---|---|
+| `ws` | `ws://`, `http://` | WebSocket and the REST bridge on one port |
+| `swarm` | `hyper://` | HyperDHT stream, frames on a Protomux channel named `hive/nostr/1` |
+| `replication` | none | relay to relay: one hypercore per relay, merged on ingest (previous section). It has no client half, so it is outside the contract suite |
+| `loopback` | `loopback://` | in-process, no sockets; the worked example in the docs and a test fixture |
+
+`hive relay --transport ws,swarm` picks them by name, and that list is the default. `--no-swarm`
+removes `swarm` from it and `--replicate <group>` adds `replication`. The agent connection and the
+test client dial through the same registry, by the scheme of the URL.
+
+⚠ **`hyper://` changed on the wire.** Frames used to be a 4-byte length prefix on the Noise stream;
+they now travel on a Protomux channel. A relay and a client on different sides of that change cannot
+talk to each other. The channel name carries a version, so the next change fails at channel pairing
+and not in the middle of a stream.
+
+---
+
 ## 🍐 Pears: what is actually used
 
-Hive runs on **Bare**, Holepunch's runtime, and uses **HyperDHT** for one of its two
-transports. That is the whole of it, and it is worth stating plainly because the rest of
-the Pears stack is not wired up:
+Hive runs on **Bare**, Holepunch's runtime. Of the rest of the stack it uses HyperDHT and
+Protomux for the `swarm` transport and Corestore and Hyperswarm for replication. Distribution
+(`pear stage`, `pear seed`) is not wired up, and it is worth stating plainly:
 
 | Piece | Status |
 |---|---|
 | Bare runtime, `bare-*` modules, `bare-build` binaries | ✅ used everywhere — this is the runtime |
-| HyperDHT (`SwarmTransport`) | ✅ used — `hyper://<relay pubkey>` is a real dial address |
-| `pear-runtime` | ⚠ loaded once as the OTA updater (`workers/main.js:170`), against the placeholder key in `package.json:16` — so the updater disables itself and says so |
+| HyperDHT, Protomux (`SwarmTransport`) | ✅ used — `hyper://<relay DHT key>` is a real dial address, frames ride a Protomux channel |
+| `pear-runtime` | ⚠ loaded once as the OTA updater (the OTA section of `workers/main.js`), against the placeholder key in `package.json:16` — so the updater disables itself and says so |
 | `corestore`, `hyperswarm` (`ReplicationTransport`) | ✅ used — one hypercore per relay, merged on ingest, opt-in behind `--replicate` |
 | `pear stage` / `pear seed` distribution | ❌ never run |
 
@@ -525,7 +552,7 @@ packages/
   hive-core       zero-I/O: kind registry, event id + signature, filters, attestation
   hive-store      SQLite store, inverted-index search, hash-chain audit log
   hive-auth       NIP-42, NIP-98, scopes, access policy, rate limiting
-  hive-relay      protocol engine, event pipeline, subscriptions, ws/http + swarm transports
+  hive-relay      protocol engine, event pipeline, subscriptions, transports (ws/http, swarm, replication, loopback)
   hive-sdk        typed event builders
   hive-cli        JSON-in/JSON-out CLI (buzz-cli compatible)
   hive-agent      mention loop, personas, QVAC inference adapter
@@ -554,6 +581,8 @@ A **persona** (kind `30175`) is the blueprint an agent is instantiated from:
 | `mock` | Deterministic test provider (default, zero deps) |
 
 Set `provider` to a peer's HyperDHT public key and inference is **delegated** to that peer over the same DHT the relay transport uses.
+
+⚠ Delegation is tested against a mocked SDK (the `delegate` block reaches `loadModel()`); it has not been run against a real peer. The agent harness calls `complete()` without `tools`, so tool calling is not exercised.
 
 Agents advertise capabilities in their kind-`10100` profile — *"who can transcribe audio?"* is a filter query, not an API call.
 
@@ -587,11 +616,16 @@ so today the updater logs that it is disabled and the relay carries on. See
 
 | Area | Status |
 |------|--------|
-| Relay: NIP-01/09/10/11/16/17/25/29/33/42/45/50/98 (both transports) | ✅ |
+| Relay: NIP-01/09/10/11/16/17/25/29/33/42/45/50/98 (every client transport) | ✅ |
+| Transports behind one interface (`ws`, `swarm`, `loopback`), contract suite in `test/transport.js` | ✅ |
+| Relay-to-relay replication (`--replicate`) | ✅ opt-in; tested on a local DHT testnet. Direct propagation only, storage unbounded, no backfill of existing history |
 | SQLite store, inverted-index search, hash-chain audit | ✅ |
 | Channels, threads, DMs, reactions, presence, typing, canvas | ✅ |
-| Agent identity: personas, teams, NIP-OA attestation, NIP-AE memory | ✅ |
-| QVAC provider (local + delegated) behind optional dependency | ✅ |
+| Agent identity: personas, teams, NIP-OA attestation (verified on the read path) | ✅ |
+| Agent memory (engrams) | 🚧 stored and queryable, but the content is plaintext: SPEC §7.4 requires NIP-44 encryption and a blinded `d` tag |
+| QVAC provider, local inference, behind an optional dependency | ✅ exercised with `@qvac/sdk` 0.18.2 (see `packages/hive-agent/lib/run.js`) |
+| QVAC delegated inference | 🚧 the `delegate` block is tested against a mocked SDK; never run against a real peer |
+| Agent tool calling | 🚧 the harness calls `complete()` without `tools` |
 | Workflow engine **including approval gates**, `send_dm`, `set_channel_topic` | ✅ *(Buzz leaves open as WF-07/WF-08)* |
 | Standalone Bare binaries (`bare-build`) | ✅ |
 | Pear packaging + OTA updates | 🚧 wired but never staged — placeholder key at `package.json:16`, no seeder |
@@ -599,7 +633,7 @@ so today the updater logs that it is disabled and the relay carries on. See
 | Voice huddles: lifecycle events recorded | 🚧 no audio relay — a p2p design should carry audio peer-to-peer |
 | Invites (9009), group roles (39003) | 🚧 registered, side effects deferred — as in Buzz |
 | Moderation: bans/timeouts (9040–9044), reports (1984), mute lists (10000) | 🚧 recorded, signed and audited — enforcement deferred: a ban does not yet block a publish |
-| Postgres, multi-node fan-out, S3, mobile/desktop, push, WoT, multi-tenancy | 💭 out of scope |
+| Postgres, a shared live registry across nodes, selective replication, S3, mobile/desktop, push, WoT, multi-tenancy | 💭 out of scope |
 
 ---
 

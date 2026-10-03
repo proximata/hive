@@ -77,7 +77,7 @@ Stop the relay first: the store is not written concurrently by design.
 ssh beecomb-relay.exe.xyz 'sudo systemctl restart hive'
 
 # redeploy
-npm test && npm run demo:tui -- --demo        # 226/226 and 16/16 must pass first
+npm test && npm run demo:tui -- --demo        # every test and 16/16 demo scenes must pass first
 npm run make:linux-x64                        # → out/linux-x64/hive (~115 MB)
 scp out/linux-x64/hive beecomb-relay.exe.xyz:/tmp/hive.new
 ssh beecomb-relay.exe.xyz '
