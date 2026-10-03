@@ -223,8 +223,8 @@ Static dir holds — probed with real requests:
 tcp 0.0.0.0:3000    hive          ← the relay, fronted by TLS on 443 and 3000
 tcp 0.0.0.0:22      sshd          ← key auth
 tcp 127.0.0.1:9999  systemd       ← shelley.socket (exe.dev platform agent), loopback only
-udp 0.0.0.0:33000   hive          ← hyperswarm DHT
-udp 0.0.0.0:49737   hive          ← hyperswarm DHT
+udp 0.0.0.0:33000   hive          ← HyperDHT
+udp 0.0.0.0:49737   hive          ← HyperDHT
 ```
 
 - Service runs as **`hive`, not root**, with `ProtectSystem=strict`, `PrivateTmp=yes`,

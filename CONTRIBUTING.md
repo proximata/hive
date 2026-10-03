@@ -123,7 +123,7 @@ npm test -- --grep "filter"  # Filter by name
 2. **Kinds are the dispatch switch** — Unknown kinds ignored
 3. **Agents = keypairs** — No special roles, same auth as humans
 4. **Local inference** — QVAC optional, mock provider for tests
-5. **Reachable without infra** — Hyperswarm dial by pubkey
+5. **Reachable without infra** — HyperDHT dial by key
 6. **Audit everything** — Hash chain on every write
 
 ## Adding a New Kind

@@ -12,9 +12,9 @@ const { providerFromPersona } = require('./qvac')
 // How far a chain of agent-to-agent replies may travel before it is cut.
 //
 // Every reply an agent makes p-tags whoever triggered it, and nothing in this
-// harness distinguishes a human sender from an agent one — which is exactly
-// what makes agent-to-agent work with no new protocol, and exactly what makes
-// two agents mentioning each other a guaranteed infinite loop. Measured before
+// harness distinguishes a human sender from an agent one. That is what makes
+// agent-to-agent work with no new protocol, and it is also what makes two
+// agents mentioning each other a guaranteed infinite loop. Measured before
 // this guard existed: 143 messages per second between two agents, content
 // compounding on every hop, terminated only by the relay's per-pubkey token
 // bucket.
@@ -22,7 +22,7 @@ const { providerFromPersona } = require('./qvac')
 // So each reply carries `["hop", "n"]` and an agent refuses to answer anything
 // already at the ceiling. 4 leaves room for human → A → B → human with slack.
 //
-// ponytail: the tag is self-signed and therefore forgeable — a hostile agent
+// ponytail: the tag is self-signed and therefore forgeable, so a hostile agent
 // can reset its own hop count to 0 forever. Ceiling accepted because it
 // terminates every honest topology and the rate limiter is still the
 // adversarial backstop. Upgrade path: have the relay stamp the hop on ingest by
@@ -62,7 +62,7 @@ class Agent extends EventEmitter {
     // An optional AgentHome (lib/home.js). The persona event stays
     // authoritative for identity; the home only overrides the system prompt and
     // adds skills, re-read every turn so an edit lands on the next message.
-    // Absent — the default, and what every test and the browser do — nothing
+    // Absent (the default, and what every test and the browser do), nothing
     // here touches a filesystem at all.
     this.home = opts.home ?? null
 
@@ -82,7 +82,7 @@ class Agent extends EventEmitter {
       bootstrap: opts.bootstrap ?? null
     })
 
-    // Who may spend the owner's key. `null` means anyone — the default, because
+    // Who may spend the owner's key. `null` means anyone (the default), because
     // the relay's channels are the access control that already exists and an
     // agent invited to a channel is meant to answer the people in it. An
     // allowlist is opt-in, configured on the author-only persona (kind 30175)
@@ -96,7 +96,7 @@ class Agent extends EventEmitter {
     this.historyLimit = opts.historyLimit ?? 12
     this.maxHops = opts.maxHops ?? DEFAULT_MAX_HOPS
     this.queues = new Map() // channelId -> { pending: [], running: boolean }
-    this.handled = [] // recent trigger keys, newest last — see _triggerKey
+    this.handled = [] // recent trigger keys, newest last; see _triggerKey
     this.handledLimit = opts.handledLimit ?? 256
     this.channels = new Set()
     this.started = false
@@ -220,16 +220,16 @@ class Agent extends EventEmitter {
 
     // The loop guard. See HOP_TAG above: this is the only thing that stops two
     // agents that mention each other, and it must come before the queue, not
-    // inside the turn — a dropped mention must cost nothing at all.
+    // inside the turn, because a dropped mention must cost nothing at all.
     const hop = hopOf(event)
     if (hop >= this.maxHops) {
       this.emit('hop-limit', event, channelId, hop)
       return
     }
 
-    // One piece of work, answered once. A delegation lands twice by design — as
+    // One piece of work, answered once. A delegation lands twice by design: as
     // the chat message the delegate is mentioned in, and as the kind-43001 job
-    // request that is the machine-readable half of the same act — and answering
+    // request that is the machine-readable half of the same act. Answering
     // both produced two identical replies to the same person. Keyed on the event
     // id the job request names, so the collapse is exact rather than a guess at
     // similar content, and order-independent: whichever arrives second is the
@@ -345,7 +345,7 @@ class Agent extends EventEmitter {
       // the turn that produced it.
       if (final?.memo?.slug) await this._publish(events.engram(this.secretKey, final.memo))
 
-      // A provider may redirect the reply at a third party — that is the whole
+      // A provider may redirect the reply at a third party, which is the whole
       // delegation mechanism. Absent, the reply answers whoever asked, as before.
       const mentions = Array.isArray(final?.mentions) && final.mentions.length > 0
         ? final.mentions
@@ -453,7 +453,7 @@ class Agent extends EventEmitter {
    * `RelayConnection.publish` resolves with the relay's OK frame whether or not
    * it was accepted, so a rate-limited reply used to vanish while the turn went
    * on to emit a kind-43004 job result pointing at an event the relay never
-   * stored — an audit log claiming work that does not exist. Measured: 80
+   * stored, which is an audit log claiming work that does not exist. Measured: 80
    * publishes, 22 refused, 0 raised. A turn that could not say what it worked
    * out is a failed turn, and the catch in `turn()` records it as 43006.
    */

@@ -13,7 +13,7 @@ const USAGE = `hive <group> <subcommand> [flags]
   exit:   0=ok  1=user  2=network  3=auth  4=other  5=write conflict
 
 Environment:
-  HIVE_RELAY_URL / BUZZ_RELAY_URL    http://…, ws://… or hyper://<pubkey>  (default http://localhost:3000)
+  HIVE_RELAY_URL / BUZZ_RELAY_URL    http://… or ws://…  (default http://localhost:3000)
   HIVE_PRIVATE_KEY / BUZZ_PRIVATE_KEY  nsec1… or 64-character hex
 
 Groups: ${[...new Set(Object.keys(commands).map((k) => k.split(' ')[0]))].join(', ')}
@@ -72,7 +72,7 @@ function fail (err) {
 }
 
 /**
- * The CLI speaks HTTP, so a `hyper://<pubkey>` URL fails with a clear message
+ * The CLI speaks HTTP, so a `hyper://` URL fails with a clear message
  * instead of a confusing connection error. Dialling a relay by key goes through
  * the agent harness.
  */

@@ -193,7 +193,7 @@ steps:
     await peer.authenticate(alice, { relayUrl: swarm.link })
 
     const history = await peer.subscribe('sync', { '#h': [channel.id], kinds: [core.KIND_STREAM_MESSAGE] })
-    check('the peer authenticated over Hyperswarm', history.closed === null)
+    check('the peer authenticated over HyperDHT', history.closed === null)
     check('and read the channel history', history.events.length >= 3, `${history.events.length} messages`)
     await peer.destroy()
 

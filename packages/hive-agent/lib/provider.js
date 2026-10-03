@@ -72,7 +72,7 @@ class InferenceProvider {
 }
 
 /**
- * Deterministic provider used by every test and by `--inference mock`.
+ * Deterministic provider used by every test and by a persona whose `runtime` is `mock`.
  *
  * The same history always produces the same reply, so a test can assert on
  * exact output and a failure points at the harness instead of model drift.
