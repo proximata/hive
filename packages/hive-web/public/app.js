@@ -221,7 +221,7 @@ function agentLabel (pubkey) {
 function fail (err) {
   const message = err instanceof Error ? err.message : String(err)
   console.error(err)
-  state.errors.push(message)
+  if (state.errors.at(-1) !== message) state.errors.push(message)
   const box = $('error')
   box.textContent = state.errors.slice(-3).join('\n')
   box.hidden = false
@@ -230,7 +230,7 @@ function fail (err) {
 /** A caveat rather than a failure: the page still works, with something less. */
 function note (message) {
   console.warn(message)
-  state.errors.push(message)
+  if (state.errors.at(-1) !== message) state.errors.push(message)
   const box = $('error')
   box.textContent = state.errors.slice(-3).join('\n')
   box.hidden = false
@@ -886,6 +886,12 @@ setInterval(refreshMetrics, 10000)
 
 // An unhandled rejection anywhere in the app is a bug the user should see, not
 // a silent dead panel.
-addEventListener('unhandledrejection', (event) => fail(event.reason))
+addEventListener('unhandledrejection', (event) => {
+  // Wallet extensions (MetaMask and others) inject scripts into every page and
+  // reject their own promises on it; those are not this app's failures.
+  const stack = String(event.reason?.stack ?? '')
+  if (/(chrome|moz|safari-web)-extension:\/\//.test(stack)) return
+  fail(event.reason)
+})
 
 boot().catch(fail)
