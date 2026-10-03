@@ -65,9 +65,9 @@ function list (value) {
 }
 
 /**
- * Resolve a value that may be `-`, meaning "read it from stdin". buzz-cli's
- * convention, and the reason an agent can pipe a diff or a file without
- * worrying about shell escaping.
+ * Resolve a value that may be `-`, meaning "read it from stdin". This is
+ * buzz-cli's convention; it lets an agent pipe a diff or a file without shell
+ * escaping.
  */
 async function resolveStdin (value, readStdin, name) {
   if (value !== '-') return value

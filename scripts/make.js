@@ -1,8 +1,8 @@
 'use strict'
 
 // Build a standalone binary for the host platform. `bare-build` compiles
-// bin.mjs and its dependencies into a single executable with no peer
-// dependencies — users need neither Node, nor Bare, nor the Pear CLI.
+// bin.mjs and its dependencies into a single executable, so users do not need
+// Node, Bare or the Pear CLI.
 //
 // Cross-building is not supported for native addons, so each platform's binary
 // is produced on a matching host (that is what the make:* scripts are for in

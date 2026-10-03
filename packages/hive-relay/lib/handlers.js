@@ -38,7 +38,7 @@ const {
 //   apply(relay, event, ctx)                        runs AFTER, so the log
 //                                                   explains every state change
 //
-// The authorization rules are Buzz's, verbatim — see SPEC.md §2.2.
+// The authorization rules follow Buzz; see SPEC.md §2.2.
 
 class RejectError extends Error {
   constructor (reason) {
@@ -105,9 +105,8 @@ function formatUuid (bytes) {
 // ------------------------------------------------------ relay-signed events --
 
 /**
- * Publish the NIP-29 discovery triple for a channel. These are signed by the
- * relay, not by any client, which is what makes them trustworthy: they say what
- * the relay believes the membership to be.
+ * Publish the NIP-29 discovery triple for a channel. The relay signs these
+ * itself, so they state what the relay believes the membership to be.
  */
 function publishDiscovery (relay, channel) {
   const members = relay.store.listMembers(channel.id)
@@ -116,8 +115,8 @@ function publishDiscovery (relay, channel) {
     ['d', channel.id],
     ['name', channel.name],
     // `closed` is always emitted per NIP-29 convention: Hive channels have
-    // explicit membership. It describes the membership model, not read access
-    // — an open channel is still readable by non-members.
+    // explicit membership. It describes the membership model. Read access is
+    // separate: an open channel is still readable by non-members.
     ['closed']
   ]
   if (channel.about) metadataTags.push(['about', channel.about])
@@ -166,8 +165,8 @@ function publishMembershipNotification (relay, kind, channelId, pubkey) {
   })
 
   // Stored community-global (channelId null) so a global #p subscription can
-  // receive it — a channel-scoped store would hide it behind the very
-  // membership it is announcing.
+  // receive it. A channel-scoped store would hide it behind the membership it
+  // announces.
   relay.store.insertEvent(event, { channelId: null })
   relay.broadcast(event, null)
   return event
@@ -349,7 +348,7 @@ const editMetadata = {
     if (present.length === 0) return 'invalid: nothing to edit'
 
     // name/about are governance; topic/purpose are day-to-day and any member
-    // may set them. That split is Buzz's and it is a good one.
+    // may set them. That split is Buzz's.
     const privileged = present.some((field) => field === 'name' || field === 'about')
     if (privileged && !isAtLeast(relay, channel.id, event.pubkey, 'admin')) {
       return 'restricted: only owners and admins may change the name or description'

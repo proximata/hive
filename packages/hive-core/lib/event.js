@@ -20,14 +20,13 @@ function fromHex (hex) {
 }
 
 /**
- * The NIP-01 canonical serialization — the exact bytes that are SHA-256'd to
+ * The NIP-01 canonical serialization: the exact bytes that are SHA-256'd to
  * produce the event id:
  *
  *   [0,"<pubkey>",<created_at>,<kind>,<tags>,"<content>"]
  *
- * JSON.stringify produces precisely the escaping NIP-01 requires (\n \" \\ \r
- * \t \b \f, everything else literal UTF-8), which is what every other
- * implementation relies on. Do not reformat this.
+ * JSON.stringify produces the escaping NIP-01 requires (\n \" \\ \r \t \b \f,
+ * everything else literal UTF-8). Do not reformat this.
  */
 function serializeEvent (event) {
   return JSON.stringify([
@@ -44,7 +43,7 @@ function getEventHash (event) {
   return toHex(sha256(b4a.from(serializeEvent(event), 'utf8')))
 }
 
-/** Shape check only — no crypto. Returns null when valid, else a reason string. */
+/** Shape check only, no crypto. Returns null when valid, else a reason string. */
 function validateEventShape (event) {
   if (event === null || typeof event !== 'object') return 'event must be an object'
   if (!HEX32.test(event.id ?? '')) return 'id must be 64 lowercase hex characters'
@@ -101,7 +100,8 @@ function getPublicKey (secretKey) {
 
 /**
  * Fill in pubkey, created_at, id and sig on a partial event.
- * `template` supplies kind, tags and content; anything already set is kept.
+ * `template` supplies kind, tags and content, and may set `created_at`.
+ * The id and signature are always computed.
  */
 function finalizeEvent (template, secretKey) {
   const sk = typeof secretKey === 'string' ? fromHex(secretKey) : secretKey
@@ -117,7 +117,7 @@ function finalizeEvent (template, secretKey) {
   return event
 }
 
-/** Sign an arbitrary message hash — used by NIP-OA attestations. */
+/** Sign an arbitrary message hash. Used by NIP-OA attestations. */
 function signHash (hash, secretKey) {
   const sk = typeof secretKey === 'string' ? fromHex(secretKey) : secretKey
   return toHex(schnorr.sign(typeof hash === 'string' ? fromHex(hash) : hash, sk))

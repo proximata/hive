@@ -3,9 +3,9 @@
 const http = require('bare-http1')
 const b4a = require('b4a')
 
-// Bare has no global fetch, so tests use this. It is also what hive-cli's HTTP
-// client is built on, which means the tests exercise the same request shape the
-// CLI produces.
+// Bare has no global fetch, so tests use this. hive-cli's HTTP client is built
+// on the same module, so the tests send the same request shape the CLI
+// produces.
 
 function request (url, { method = 'GET', headers = {}, body = null } = {}) {
   const target = new URL(url)

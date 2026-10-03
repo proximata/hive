@@ -8,8 +8,7 @@ const query = require('./lib/query')
 
 /**
  * Open a store. `driver` exists so a Postgres implementation can be dropped in
- * without touching a single call site — no SQLite value ever crosses this
- * boundary.
+ * without changing call sites. No SQLite value crosses this boundary.
  */
 function openStore (location = ':memory:', opts = {}) {
   const driver = opts.driver ?? 'sqlite'

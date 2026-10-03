@@ -757,7 +757,7 @@ test('a channel-scoped kindless subscription is allowed but still leaks nothing'
   t.is(sub.closed, null)
 
   // A gift wrap addressed to Alice is published while Bob holds that
-  // subscription. The per-event gate, not the filter gate, is what stops it.
+  // subscription. The per-event gate stops it.
   const wrap = sign(alice, {
     kind: core.KIND_GIFT_WRAP,
     tags: [['p', alice.pubkey], ['h', chan]],
@@ -800,8 +800,8 @@ test('gift wraps only reach their addressee', async (t) => {
   await new Promise((resolve) => setTimeout(resolve, 100))
   t.is(eveClient.messages.filter((m) => m.type === 'EVENT' && m.subId === 'dms').length, 0)
 
-  // Knowing the id is not enough: the per-event gate still withholds it. This
-  // is the path the filter-level check deliberately lets through.
+  // The per-event gate withholds it even when the id is known. This is the
+  // path the filter-level check deliberately lets through.
   const byId = await eveClient.subscribe('probe', { ids: [wrap.id] })
   t.is(byId.closed, null, 'an id lookup is not refused outright')
   t.is(byId.events.length, 0, 'but it returns nothing')

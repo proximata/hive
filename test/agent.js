@@ -382,7 +382,7 @@ test('an agent answers a mention and records the job lifecycle', async (t) => {
 
   const human = await h.connect(alice)
 
-  // Alice opens a channel and invites the agent, exactly as she would a person.
+  // Alice opens a channel and invites the agent as she would a person.
   const create = events.createChannel(alice.secretKey, { name: 'engineering', visibility: 'open' })
   await human.publish(create)
   const channelId = h.store.listChannels()[0].id
@@ -454,7 +454,7 @@ test('an agent never answers itself', async (t) => {
   agent._onevent(ownReply, `chan:${channelId}`)
   t.is(mentions, 0, 'a self-mention is dropped before it can loop')
 
-  // A message that does not mention the agent is context, not a request.
+  // A message that does not mention the agent is context only.
   const notForMe = sign(identity('other'), {
     kind: core.KIND_STREAM_MESSAGE,
     tags: [['h', channelId]],
@@ -463,7 +463,7 @@ test('an agent never answers itself', async (t) => {
   agent._onevent(notForMe, `chan:${channelId}`)
   t.is(mentions, 0, 'an unaddressed message does not trigger a turn')
 
-  // But one that does mention it, does.
+  // A message that mentions the agent is counted as a mention.
   const forMe = sign(identity('other'), {
     kind: core.KIND_STREAM_MESSAGE,
     tags: [['h', channelId], ['p', bot.pubkey]],

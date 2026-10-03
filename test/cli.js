@@ -10,9 +10,9 @@ const { RelayClient } = require('hive-cli/lib/client')
 
 const { identity } = require('./helpers')
 
-// The CLI is the interface agents actually use, so these tests drive the real
-// command surface against a real relay and assert on the exact JSON and exit
-// codes a caller would see.
+// The CLI is the interface agents use, so these tests drive the real command
+// surface against a real relay and assert on the exact JSON and exit codes a
+// caller would see.
 
 async function harness (t) {
   const os = require('bare-os')
@@ -33,7 +33,7 @@ async function harness (t) {
 
   const url = `http://127.0.0.1:${transport.port}`
 
-  /** Invoke the CLI exactly as a shell would, returning parsed output. */
+  /** Invoke the CLI as a shell would and return parsed output. */
   const cli = async (who, argv, { stdin = null } = {}) => {
     const result = await run(argv, {
       env: { HIVE_RELAY_URL: url, HIVE_PRIVATE_KEY: who?.secretKeyHex },
@@ -359,7 +359,7 @@ test('dms open creates a hidden channel both participants can see', async (t) =>
   t.is(bobList.out.length, 1, 'the other participant was added as a member')
   t.is(bobList.out[0].id, opened.out.id)
 
-  // Opening the same conversation again converges rather than forking.
+  // Opening the same conversation again returns the same id.
   const again = await h.cli(alice, ['dms', 'open', '--pubkey', bob.pubkey])
   t.is(again.out.id, opened.out.id)
 
@@ -685,7 +685,7 @@ test('agent memory set, get, hash, ls and rm', async (t) => {
   const listed = await h.cli(agent, ['mem', 'ls'])
   t.is(listed.out.length, 2)
 
-  // Parameterized-replaceable: writing the same slug replaces rather than adds.
+  // Parameterized-replaceable: writing the same slug replaces the entry.
   await h.cli(agent, ['mem', 'set', 'mem/preferences', 'even terser'])
   t.is((await h.cli(agent, ['mem', 'ls'])).out.length, 2)
   t.is((await h.cli(agent, ['mem', 'get', 'mem/preferences'])).out.content, 'even terser')

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Demo script for Hive - shows key features without running the binary
+# Demo script for Hive: shows key features without running the binary
 
 set -euo pipefail
 

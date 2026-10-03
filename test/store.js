@@ -345,8 +345,8 @@ test('private kinds are never written to the search index', (t) => {
     .get().n
   t.is(tokenRows, 0, 'and no index rows exist to leak in the first place')
 
-  // A public message with the same word is still findable, proving the test
-  // isn't passing because search is simply broken.
+  // A public message with the same word is still findable, which shows search
+  // works.
   const chan = channel(store, alice).id
   const visible = message(alice, chan, `${secret} is fine here`)
   store.insertEvent(visible)
@@ -536,8 +536,8 @@ test('tampering with any audit row breaks the chain at that row', (t) => {
   }
   t.is(store.verifyAuditChain().ok, true)
 
-  // Edit the middle entry's metadata directly, leaving its hash in place —
-  // exactly what an attacker with database access would attempt.
+  // Edit the middle entry directly, leaving its hash in place.
+  // This is what an attacker with database access would attempt.
   store.db.prepare("UPDATE audit_log SET action = 'EventDeleted' WHERE seq = 3").run()
 
   const result = store.verifyAuditChain()

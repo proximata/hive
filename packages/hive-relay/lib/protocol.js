@@ -2,8 +2,8 @@
 
 const { normalizeFilter, LIMITS } = require('hive-core')
 
-// NIP-01 wire messages. Parsing is deliberately strict: a malformed frame gets
-// a NOTICE, never a stack trace, and never a half-registered subscription.
+// NIP-01 wire messages. Parsing is strict: a malformed frame gets a NOTICE and
+// leaves no half-registered subscription.
 
 class ProtocolError extends Error {
   constructor (message) {
@@ -59,8 +59,7 @@ function parseClientMessage (raw) {
         if (filter === null) throw new ProtocolError(`${type} contains a malformed filter`)
         filters.push(filter)
       }
-      // A REQ with no filters would mean "everything", which no client wants
-      // and every relay would regret.
+      // A REQ with no filters would mean "everything", so it is rejected.
       if (filters.length === 0) throw new ProtocolError(`${type} requires at least one filter`)
 
       return { type, subId, filters }

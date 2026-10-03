@@ -19,10 +19,10 @@ function randomChallenge () {
 
 /**
  * Compare relay URLs the way NIP-42 intends: scheme and trailing slashes are
- * cosmetic, the host is what matters. Being strict here breaks every client
- * that connects over ws:// but was told about http://; being loose here would
- * let a challenge signed for another relay be replayed at this one, so the host
- * comparison stays exact.
+ * cosmetic, the host is what matters. Ignoring the scheme keeps clients working
+ * that connect over ws:// but were told about http://. The host comparison
+ * stays exact, since a looser one would let a challenge signed for another
+ * relay be replayed at this one.
  */
 function sameRelay (a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false

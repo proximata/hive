@@ -2,9 +2,8 @@
 
 // End-to-end demo: a human and an agent share a workspace.
 //
-// Everything here goes through the same interfaces a user would touch — the
+// Everything here goes through the same interfaces a user would touch: the
 // CLI for the human, the agent harness for the agent, and the relay for both.
-// If this passes, the product works.
 
 const os = require('bare-os')
 const path = require('bare-path')
@@ -30,10 +29,10 @@ function say (message) {
 
 function check (label, condition, detail = '') {
   if (condition) {
-    console.log(`   \x1b[32m✓\x1b[0m ${label}${detail ? ' — ' + detail : ''}`)
+    console.log(`   \x1b[32m✓\x1b[0m ${label}${detail ? ': ' + detail : ''}`)
   } else {
     failures++
-    console.log(`   \x1b[31m✗\x1b[0m ${label}${detail ? ' — ' + detail : ''}`)
+    console.log(`   \x1b[31m✗\x1b[0m ${label}${detail ? ': ' + detail : ''}`)
   }
 }
 
@@ -257,7 +256,7 @@ steps:
 
   console.log(
     failures === 0
-      ? '\n\x1b[32m✓ demo passed\x1b[0m — humans and agents shared a workspace end to end\n'
+      ? '\n\x1b[32m✓ demo passed\x1b[0m: humans and agents shared a workspace end to end\n'
       : `\n\x1b[31m✗ ${failures} check(s) failed\x1b[0m\n`
   )
   Bare.exit(failures === 0 ? 0 : 1)

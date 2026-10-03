@@ -120,7 +120,7 @@ test('unknown variables are empty rather than fatal', (t) => {
 })
 
 test('the evaluator refuses code rather than running it', (t) => {
-  // The whole point of hand-rolling this: a workflow definition is
+  // The evaluator is hand-rolled because a workflow definition is
   // user-supplied, so `eval` here would be remote code execution in the relay.
   for (const attack of [
     'process.exit(1)',
@@ -133,8 +133,8 @@ test('the evaluator refuses code rather than running it', (t) => {
     t.exception(() => evaluate(attack, {}), `refused: ${attack}`)
   }
 
-  // A bare host identifier is not an error — it is simply an unknown variable,
-  // which reads as empty. There is no path from a name to the host object.
+  // A bare host identifier is an unknown variable and reads as empty. There is
+  // no path from a name to the host object.
   t.is(evaluate('globalThis', {}), false)
   t.is(evaluate("globalThis == ''", {}), true)
 })
@@ -548,7 +548,7 @@ steps:
   await client.publish(events.message(alice.secretKey, { channel: channelId, content: 'go' }))
   const gate = await suspended
 
-  // The whole loop through the protocol: an approval is just a signed event.
+  // The whole loop through the protocol: an approval is a signed event.
   const resumed = new Promise((resolve) => h.engine.once('resumed', resolve))
   await client.publish(events.approval(alice.secretKey, { token: gate.token, approved: true }))
   await resumed
@@ -755,8 +755,7 @@ test('NIP-34 git events are stored and queryable', async (t) => {
   t.is(h.store.queryEvents([{ kinds: [core.KIND_GIT_PATCH] }]).length, 1)
   t.is(h.store.queryEvents([{ kinds: [core.KIND_GIT_ISSUE] }]).length, 1)
 
-  // Searchable like any other content, which is most of the value of the
-  // event surface even without hosting.
+  // Searchable like any other content, even without hosting.
   t.is(h.store.search('frames').length, 1)
 })
 
@@ -795,7 +794,7 @@ test('huddle lifecycle events are recorded even though audio is not built', asyn
   }])
   t.is(recorded.length, 5, 'the whole huddle is on the audit log')
 
-  // But the audio endpoint is honest about not existing.
+  // But the audio endpoint returns 501 because audio is not built.
   const { request } = require('./http')
   const response = await request(`http://127.0.0.1:${h.port}/huddle/${channelId}/audio`)
   t.is(response.status, 501)

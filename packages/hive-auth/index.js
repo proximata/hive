@@ -6,11 +6,11 @@ const scopes = require('./lib/scopes')
 const ratelimit = require('./lib/ratelimit')
 
 /**
- * Gate that runs after a signature verifies but before a connection is trusted.
+ * Gate that runs after a signature verifies, before a connection is trusted.
  *
- * Both checks fail closed: a store error denies the connection rather than
- * letting it through, and the reason returned to the client is deliberately
- * generic so it never reveals which gate rejected them.
+ * Both checks fail closed: a store error denies the connection. The reason
+ * returned to the client is generic so it does not reveal which gate rejected
+ * them.
  */
 class AccessPolicy {
   constructor (store, opts = {}) {

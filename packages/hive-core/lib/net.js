@@ -79,7 +79,7 @@ function isPrivateIPv6 (groups) {
   if ((g0 & 0xff00) === 0xff00) return true // ff00::/8 multicast
   if (g0 === 0x2001 && groups[1] === 0x0db8) return true // 2001:db8::/32 documentation
 
-  // IPv4-mapped ::ffff:0:0/96 — recurse into the embedded address so that
+  // IPv4-mapped ::ffff:0:0/96: recurse into the embedded address so that
   // ::ffff:127.0.0.1 is rejected for the same reason 127.0.0.1 is.
   if (groups.slice(0, 5).every((g) => g === 0) && groups[5] === 0xffff) {
     const octets = [groups[6] >> 8, groups[6] & 0xff, groups[7] >> 8, groups[7] & 0xff]
@@ -91,7 +91,7 @@ function isPrivateIPv6 (groups) {
 
 /**
  * True when this address must not be dialled from a user-supplied URL.
- * Unparseable input returns true — fail closed.
+ * Unparseable input returns true (fail closed).
  */
 function isPrivateIp (address) {
   if (typeof address !== 'string' || address.length === 0) return true

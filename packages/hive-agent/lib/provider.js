@@ -3,11 +3,10 @@
 /**
  * The inference boundary.
  *
- * Everything above this line is protocol; everything below is a model. Keeping
- * them apart is what lets the whole relay and agent test suite run with no GPU,
- * no model download and no network — and what lets a persona choose a local
- * model, a delegated peer, or something else entirely without the harness
- * caring.
+ * Everything above this line is protocol and everything below is a model.
+ * Keeping them apart lets the relay and agent test suites run without a GPU,
+ * model download or network, and lets a persona choose a local model or a
+ * delegated peer without the harness changing.
  *
  *   capabilities()  -> string[]                     what this provider can do
  *   complete(req)   -> { events, final }            streaming generation
@@ -16,8 +15,8 @@
  *   speak(text)     -> { audio }
  *
  * `complete` returns an object with an async-iterable `events` and a `final`
- * promise, mirroring the QVAC SDK's CompletionRun so the real adapter is a thin
- * translation rather than a re-shaping.
+ * promise, mirroring the QVAC SDK's CompletionRun, so the real adapter is a
+ * thin translation.
  *
  * Three OPTIONAL fields on `final` let a provider drive the harness without the
  * harness knowing anything about a particular model. All three are ignored when
@@ -75,9 +74,8 @@ class InferenceProvider {
 /**
  * Deterministic provider used by every test and by `--inference mock`.
  *
- * It is deliberately dull: given the same history it produces the same reply,
- * so a test can assert on exact output and a failure means the harness broke,
- * not that a model drifted.
+ * The same history always produces the same reply, so a test can assert on
+ * exact output and a failure points at the harness instead of model drift.
  */
 class MockProvider extends InferenceProvider {
   constructor (opts = {}) {
@@ -117,8 +115,8 @@ class MockProvider extends InferenceProvider {
   }
 
   async embed (texts) {
-    // A stable bag-of-characters projection: not useful for retrieval, but
-    // deterministic and dimensionally correct, which is what a test needs.
+    // Stable bag-of-characters projection. It is useless for retrieval, but it
+    // is deterministic and has the right dimension, which is all a test needs.
     return (Array.isArray(texts) ? texts : [texts]).map((text) => {
       const vector = new Array(8).fill(0)
       for (let i = 0; i < text.length; i++) vector[i % 8] += text.charCodeAt(i) / 1000

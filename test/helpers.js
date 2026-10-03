@@ -4,7 +4,7 @@ const core = require('hive-core')
 
 let counter = 0
 
-/** A deterministic-ish identity for tests. */
+/** A fresh random identity for tests. */
 function identity (label = 'test') {
   const secretKey = core.generateSecretKey()
   return {

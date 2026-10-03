@@ -21,9 +21,8 @@ Groups: ${[...new Set(Object.keys(commands).map((k) => k.split(' ')[0]))].join('
 Use "-" as a content argument to read the body from stdin.`
 
 /**
- * Run one command. Returns `{ stdout, stderr, exitCode }` rather than writing
- * and exiting, so tests can drive the real command surface in-process instead
- * of asserting on spawned output.
+ * Run one command. Returns `{ stdout, stderr, exitCode }` instead of writing
+ * and exiting, so tests can drive the real command surface in-process.
  */
 async function run (argv, { env = {}, readStdin = async () => null, client = null } = {}) {
   const { positional, flags } = parseArgs(argv)
@@ -73,9 +72,9 @@ function fail (err) {
 }
 
 /**
- * `hyper://<pubkey>` is accepted everywhere a URL is, but the CLI speaks HTTP,
- * so it is rejected with a clear message rather than a confusing connection
- * error. (Dialling a relay by key from the CLI goes through the agent harness.)
+ * The CLI speaks HTTP, so a `hyper://<pubkey>` URL fails with a clear message
+ * instead of a confusing connection error. Dialling a relay by key goes through
+ * the agent harness.
  */
 function normalizeUrl (url) {
   if (url.startsWith('hyper://')) {

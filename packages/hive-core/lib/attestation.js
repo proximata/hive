@@ -9,11 +9,11 @@ const { signHash, verifyHash, toHex } = require('./event')
 
 // NIP-OA owner attestation.
 //
-// An owner authorizes an agent key to act without impersonating it. The
-// distinction matters: NIP-26 delegation assigns the event to the delegator,
-// which is exactly wrong for agent provenance. Here the event stays authored by
-// `event.pubkey` and the tag is authorization *evidence* — a reusable
-// capability that may appear on many events whose conditions hold.
+// An owner authorizes an agent key to act without impersonating it. NIP-26
+// delegation assigns the event to the delegator, which does not fit agent
+// provenance. Here the event stays authored by `event.pubkey` and the tag is
+// authorization evidence: a reusable capability that may appear on many events
+// whose conditions hold.
 
 const DOMAIN = 'nostr:agent-auth:'
 
@@ -32,8 +32,8 @@ function createAttestation ({ ownerSecretKey, ownerPubkey, agentPubkey, conditio
  * Verify an event's attestation.
  *
  * Returns `{ ok, owner, conditions, reason }`. An event with no `auth` tag is
- * `ok: false` with `reason: 'absent'` — not an error, just unattested. More
- * than one tag is treated as having none at all, per NIP-OA.
+ * `ok: false` with `reason: 'absent'`: unattested, not an error. More than one
+ * tag is rejected as unattested, per NIP-OA.
  */
 function verifyAttestation (event, { now } = {}) {
   const tags = event.tags.filter((tag) => tag[0] === 'auth')

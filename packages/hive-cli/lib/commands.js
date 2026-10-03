@@ -125,9 +125,9 @@ const commands = {
 
     await ctx.client.publish(event)
 
-    // Return the created channel rather than the command event: the id is what
-    // every follow-up command needs, and making the caller derive it from a
-    // discovery query would be hostile.
+    // Return the created channel instead of the command event: the id is what
+    // every follow-up command needs, and a caller should not have to derive it
+    // from a discovery query.
     const channels = await ctx.client.get('/api/channels')
     const created = channels.filter((c) => c.name === event.tags.find((t) => t[0] === 'name')[1])
     return created[created.length - 1] ?? { event }
@@ -730,12 +730,12 @@ function byCapability (records, ctx) {
 }
 
 /**
- * A `created_at` that is guaranteed to supersede the current head of an
- * addressable coordinate.
+ * A `created_at` chosen to supersede the current head of an addressable
+ * coordinate.
  *
  * NIP-01 timestamps have second resolution and ties are broken by the *lowest*
  * event id, so writing the same slug twice within one second can silently keep
- * the older value — "set it, then set it again" would appear to do nothing.
+ * the older value, and "set it, then set it again" would appear to do nothing.
  * Bumping past the existing head makes the write land. Buzz solves the same
  * problem the same way for its membership roster.
  */

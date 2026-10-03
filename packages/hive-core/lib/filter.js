@@ -15,8 +15,8 @@ function matchesPrefix (candidates, value) {
 /**
  * Does one filter match this event? AND across every constraint present.
  *
- * NIP-01 edge case carried over from Buzz: `kinds: []` means "match nothing",
- * NOT "match everything". An absent `kinds` field means match all kinds.
+ * NIP-01 edge case carried over from Buzz: `kinds: []` matches nothing. An
+ * absent `kinds` field matches all kinds.
  */
 function filterMatches (filter, event) {
   if (filter.ids !== undefined) {
@@ -96,12 +96,10 @@ function filterCanMatchResultGated (filter) {
  * is present and every value equals the reader's own pubkey. Without this a
  * client could subscribe to other people's DMs and membership changes.
  *
- * Two exemptions, both because this check is defence in depth rather than the
- * enforcement (the per-event gate is):
- *
- *  - filters naming specific `ids`, which are point lookups rather than
- *    eavesdropping, and which every client uses to resolve a reply target;
- *  - channel-scoped filters, handled by the caller.
+ * This check is defence in depth; the per-event gate is the enforcement.
+ * Filters naming specific `ids` are skipped: they are point lookups, and
+ * clients use them to resolve a reply target. Channel-scoped requests are
+ * exempted by the caller before it gets here.
  *
  * Returns null when authorized, otherwise the CLOSED reason string.
  */

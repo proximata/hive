@@ -40,14 +40,14 @@ function hopOf (event) {
  *
  * An agent is a Nostr keypair that joined some channels. It watches for
  * mentions, batches them per channel, asks its provider for a reply, and posts
- * the reply as an ordinary kind-9 message — signed by itself, audited like
- * anyone else's. Nothing about it is privileged; the relay cannot tell it from
- * a person.
+ * the reply as an ordinary kind-9 message, signed by itself and audited like
+ * anyone else's. It has no special privileges, and the relay handles its
+ * messages like a person's.
  *
  * Backpressure is per channel: at most one turn is in flight per channel, and
  * mentions that arrive during a turn are batched into the next prompt. A slow
- * turn in one channel therefore never blocks another, and a burst of mentions
- * produces one considered reply rather than five racing ones.
+ * turn in one channel therefore does not block another, and a burst of
+ * mentions is answered in batches instead of by several racing replies.
  */
 class Agent extends EventEmitter {
   constructor (opts = {}) {
@@ -106,9 +106,9 @@ class Agent extends EventEmitter {
    * Report a non-fatal error.
    *
    * A bare `emit('error')` with no listener throws, which would turn a relay
-   * hiccup or a shutdown race into a crashed process. An agent is a long-lived
-   * background participant: it records the failure and keeps going, and callers
-   * that care can attach a listener.
+   * hiccup or a shutdown race into a crashed process. An agent is long-lived,
+   * so it records the failure and keeps going. Callers that care can attach a
+   * listener.
    */
   _raise (err) {
     this.lastError = err
@@ -133,9 +133,9 @@ class Agent extends EventEmitter {
     // Mentions cannot be watched with one global subscription: channel-scoped
     // events are delivered only to subscriptions that name their channel, which
     // is the boundary that stops anyone draining private channels. So the agent
-    // learns which channels it belongs to from membership notifications —
-    // which are community-global precisely so a client can bootstrap without
-    // knowing any channel id in advance — and then subscribes per channel.
+    // learns which channels it belongs to from membership notifications (they
+    // are community-global so a client can bootstrap without knowing any
+    // channel id in advance) and then subscribes per channel.
     //
     // The historical batch replays every past add/remove, so a restart
     // reconstructs the full channel set before EOSE.
@@ -150,8 +150,8 @@ class Agent extends EventEmitter {
 
   /**
    * Publish the agent's kind-10100 profile: who owns it, what runtime it uses,
-   * and what it can actually do. This is the discovery surface — "who on this
-   * relay can transcribe audio?" is a filter query, not an API call.
+   * and what it can actually do. This is the discovery surface: asking who on
+   * this relay can transcribe audio is a filter query.
    */
   async publishProfile () {
     const capabilities = await this.provider.capabilities()
@@ -167,8 +167,8 @@ class Agent extends EventEmitter {
       sdkVersion: this.persona?.sdk_version ?? null
     })
 
-    // Attach the owner attestation when there is one, so every action this
-    // agent takes carries provenance without pretending to be the owner.
+    // Attach the owner attestation when there is one, so the profile carries
+    // provenance without pretending to be the owner.
     if (this.attestation !== null) event.tags.push(this.attestation)
     const signed = this.attestation === null
       ? event
@@ -196,9 +196,8 @@ class Agent extends EventEmitter {
     const channelId = core.channelId(event)
     if (channelId === null) return
 
-    // Only mentions are answered. Everything else in the channel is context the
-    // agent can read but should not react to — an agent that replies to every
-    // message is a chat bot, not a teammate.
+    // Only mentions are answered. The channel subscription already filters on
+    // the agent's pubkey; this check keeps that rule explicit.
     if (!core.referencedPubkeys(event).includes(this.pubkey)) return
 
     // Set membership, before anything is queued and long before a token is
@@ -381,8 +380,8 @@ class Agent extends EventEmitter {
         content: reply.id
       })
 
-      // Turn metrics are encrypted to the owner in production and p-gated
-      // either way, so cost and latency stay between agent and owner.
+      // Turn metrics are p-gated, so cost and latency are delivered only to the
+      // owner. The content is plain JSON.
       if (this.owner !== null) {
         await this.connection.publish(events.turnMetric(this.secretKey, {
           owner: this.owner,
@@ -411,7 +410,7 @@ class Agent extends EventEmitter {
     }
   }
 
-  /** Recent channel messages plus this batch, as provider-shaped turns. */
+  /** The system prompt (from the agent home, else the persona) plus this batch, as provider-shaped turns, capped at `historyLimit`. */
   async _buildHistory (channelId, batch) {
     const history = []
 

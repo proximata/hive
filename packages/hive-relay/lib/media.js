@@ -7,9 +7,8 @@ const b4a = require('b4a')
 const { sha256, toHex } = require('hive-core')
 
 // Blossom-style content-addressed blob storage on the local filesystem. Buzz
-// puts these in S3; a self-hosted peer-to-peer relay has no reason to require
-// an object store, and content addressing means the name is the integrity
-// check.
+// puts these in S3; a self-hosted peer-to-peer relay does not need an object
+// store, and the content address serves as the integrity check.
 
 const MIME_EXTENSIONS = {
   'image/png': '.png',

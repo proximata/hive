@@ -9,8 +9,8 @@ const { buildNip98Header } = require('hive-auth')
 const { CliError } = require('./errors')
 
 /**
- * HTTP client for the relay. Every request is signed with NIP-98, so there is
- * no session to establish and no token to store — an agent needs only its key.
+ * HTTP client for the relay. Every request is signed with NIP-98, so an agent
+ * needs only its key.
  */
 class RelayClient {
   constructor ({ url, secretKey }) {
