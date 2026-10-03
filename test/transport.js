@@ -285,6 +285,16 @@ test('the base classes name the method a transport forgot to implement', async (
   t.exception(() => new TransportClient().send('frame'), /must implement send/)
 })
 
+test('swarm: a failed dial rejects with the reason instead of hanging', async (t) => {
+  const testnet = await createTestnet(3)
+  t.teardown(() => testnet.destroy())
+
+  const client = transports.createClient('hyper://' + 'cd'.repeat(32), { bootstrap: testnet.bootstrap })
+  t.teardown(() => client.close())
+
+  await t.exception(() => client.connect('hyper://' + 'cd'.repeat(32)), /PEER_NOT_FOUND|closed/i)
+})
+
 // ------------------------------------------------------------- replication --
 
 test('replication is a registered relay-to-relay transport: no client half, no scheme', async (t) => {

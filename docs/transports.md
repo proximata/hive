@@ -7,7 +7,7 @@ Four transports ship in `packages/hive-relay/lib/transports/`:
 | id | schemes | what it is |
 |---|---|---|
 | `ws` | `ws://`, `http://` | WebSocket and the REST bridge on one port (`bare-ws`, `bare-http1`) |
-| `swarm` | `hyper://` | HyperDHT stream, length-prefixed frames |
+| `swarm` | `hyper://` | HyperDHT stream, frames on a Protomux channel |
 | `replication` | none | relay to relay: one hypercore per relay, merged on ingest. Has no client half; see the last section |
 | `loopback` | `loopback://` | in-process, no sockets; the example below and a test fixture |
 
@@ -22,7 +22,7 @@ Server half, `class extends Transport` (`lib/transports/transport.js`):
 | `constructor(relay, opts)` | keep `relay`; read your own options from `opts` |
 | `get link` | the address clients dial, for example `hyper://<key>` |
 | `async listen()` | start accepting peers |
-| `async close()` | close every peer and stop listening; resolve when nothing is left open |
+| `async close()` | stop accepting peers and close the ones you have; resolve when nothing is left open |
 | `describe()` | optional: extra facts for the operator (a port, a key) |
 | `this.accept(peer)` | hand an inbound peer to the relay; returns a session or `null` |
 
@@ -51,6 +51,8 @@ Rules:
 
 - Identity is not the transport's job. Nostr identity comes from NIP-42 on top. A transport may derive its own wire key from `relay.secretKey` (`swarm` and `replication` do) but never signs events.
 - Enforce `LIMITS.MAX_FRAME_BYTES` on inbound frames and drop the peer that exceeds it.
+- Version the wire format in a name the other side can see (`hive/nostr/1` for swarm), so a change fails at channel pairing and not in the middle of a stream.
+- Handle stream errors. An `'error'` event with no listener is an uncaught exception, so every stream a transport opens needs an error listener, and cleanup belongs in `'close'`, which always follows.
 
 ## Five steps, with the loopback transport
 

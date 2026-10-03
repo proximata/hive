@@ -354,8 +354,9 @@ dial the DHT public key, which is not the Nostr pubkey:
 hyper://<64-hex DHT public key>
 ```
 
-Peers `dht.connect(publicKey)` and get an end-to-end encrypted Noise stream. Frames are length-prefixed: a
-4-byte big-endian length, then the JSON text. The relay needs no open port, DNS name or certificate, and HyperDHT holepunches NAT. The Noise handshake
+Peers `dht.connect(publicKey)` and get an end-to-end encrypted Noise stream. Frames ride a
+`protomux` channel named `hive/nostr/1`, one `compact-encoding` string per Nostr frame. The relay
+needs no open port, DNS name or certificate, and HyperDHT holepunches NAT. The Noise handshake
 authenticates the *transport*; NIP-42 authenticates the *Nostr identity* on top. They are different
 claims and both are required. A relay is addressed by key, so Hyperswarm topic discovery is not
 used.

@@ -8,6 +8,8 @@ const { LIMITS } = require('hive-core')
 const { createRestRouter } = require('../rest')
 const { Transport, TransportClient } = require('./transport')
 
+const CLOSE_GRACE_MS = 1000
+
 /**
  * WebSocket and HTTP on one port.
  *
@@ -36,6 +38,7 @@ class WebSocketTransport extends Transport {
     this.server = http.createServer((req, res) => this._onrequest(req, res))
     this.wss = new ws.Server({ server: this.server }, (socket) => this._onconnection(socket))
     this.sockets = new Set()
+    this._onidle = null
   }
 
   get link () {
@@ -54,7 +57,18 @@ class WebSocketTransport extends Transport {
     })
   }
 
-  close () {
+  async close () {
+    // end() runs the WebSocket closing handshake, so clients see the shutdown.
+    // destroy() would drop the TCP link without telling them, and so would
+    // closing the HTTP server while a close frame is still in flight.
+    for (const socket of [...this.sockets]) {
+      try {
+        socket.end()
+      } catch {}
+    }
+    await this._untilNoSockets(CLOSE_GRACE_MS)
+
+    // A peer that never answers the close frame must not hold shutdown open.
     for (const socket of [...this.sockets]) {
       try {
         socket.destroy()
@@ -62,7 +76,21 @@ class WebSocketTransport extends Transport {
     }
     this.sockets.clear()
 
-    return new Promise((resolve) => this.server.close(() => resolve()))
+    await new Promise((resolve) => this.server.close(() => resolve()))
+  }
+
+  _untilNoSockets (timeout) {
+    if (this.sockets.size === 0) return Promise.resolve()
+
+    return new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(timer)
+        this._onidle = null
+        resolve()
+      }
+      const timer = setTimeout(finish, timeout)
+      this._onidle = finish
+    })
   }
 
   address () {
@@ -103,6 +131,7 @@ class WebSocketTransport extends Transport {
     const done = () => {
       this.sockets.delete(socket)
       session.closed()
+      if (this.sockets.size === 0) this._onidle?.()
     }
     socket.on('close', done)
     socket.on('end', done)

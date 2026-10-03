@@ -2,19 +2,21 @@
 
 const test = require('brittle')
 const DHT = require('hyperdht')
+const Protomux = require('protomux')
 const createTestnet = require('hyperdht/testnet')
 const core = require('hive-core')
 
 const { openStore } = require('hive-store')
 const { Relay, SwarmTransport } = require('hive-relay')
-const { swarmKeyPair } = require('hive-relay/lib/transports/swarm')
+const { swarmKeyPair, PROTOCOL } = require('hive-relay/lib/transports/swarm')
 
 const { TestClient } = require('./client')
 const { identity, sign, message } = require('./helpers')
 
-// The whole point of this suite: the relay behaves identically over Hyperswarm
-// and over WebSocket, because both transports feed the same protocol engine.
-// Tests run against a local DHT testnet so nothing touches the public network.
+// Behavior specific to the swarm transport: key derivation, the Protomux
+// handshake and an end-to-end privacy check. What every transport must do is
+// in transport.js. Tests run against a local DHT testnet so nothing touches
+// the public network.
 
 async function harness (t) {
   const testnet = await createTestnet(3)
@@ -184,4 +186,30 @@ test('a dropped peer is cleaned up and can reconnect', async (t) => {
   const second = await member(h, alice)
   const event = sign(alice, { kind: 1, content: 'reconnected' })
   t.is((await second.publish(event)).accepted, true)
+})
+
+test('a peer that opens some other protocol never reaches the relay', async (t) => {
+  const h = await harness(t)
+
+  const dht = new DHT({ bootstrap: h.testnet.bootstrap })
+  t.teardown(() => dht.destroy())
+
+  const stream = dht.connect(core.fromHex(h.transport.publicKey))
+  stream.on('error', () => {})
+
+  let closed = false
+  const channel = Protomux.from(stream).createChannel({
+    protocol: 'not-hive/1',
+    onclose: () => { closed = true }
+  })
+  channel.open()
+
+  t.is(await channel.fullyOpened(), false, 'the relay does not pair an unknown protocol')
+  t.is(closed, true)
+  t.is(h.relay.connections.size, 0, 'and the relay never saw a connection')
+  stream.destroy()
+})
+
+test('the protocol name is versioned', (t) => {
+  t.is(PROTOCOL, 'hive/nostr/1')
 })
