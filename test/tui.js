@@ -108,7 +108,7 @@ test('decode resolves a lone trailing escape', (t) => {
 
   // decode() is total, so a CSI the terminal never finished cannot be held
   // back: the ESC is reported and the orphaned bytes decode as themselves.
-  // Input is the layer that waits for the rest — see the split-chunk test.
+  // Input is the layer that waits for the rest. See the split-chunk test.
   t.alike(keys('\x1b[').map((k) => k.name), ['escape', 'char'])
   t.alike(keys('\x1b[').map((k) => k.ch), [null, '['])
 })

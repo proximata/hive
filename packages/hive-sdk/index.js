@@ -14,7 +14,7 @@ const events = {
   // ------------------------------------------------------------- messages --
 
   // `extraTags` exists so callers can attach a tag this builder has no opinion
-  // about — the agent harness's hop counter is the first — without rebuilding
+  // about (the agent harness's hop counter is the first), without rebuilding
   // the h/e/p shape by hand and drifting from it.
   message (secretKey, { channel, content, replyTo = null, rootId = null, mentions = [], extraTags = [] }) {
     const tags = [['h', channel]]

@@ -164,8 +164,8 @@ function classify (text) {
 // Owned here rather than by the caller precisely so it can be taken apart
 // again. Without that, the second agent in a chain summarises the FIRST agent's
 // envelope instead of the request inside it, and by the third hop the message
-// is a summary of a header. Routing still matches the whole line — the header
-// IS the addressing — but triage only ever sees the payload.
+// is a summary of a header. Routing still matches the whole line (the header
+// IS the addressing), but triage only ever sees the payload.
 const ENVELOPE = /^@(\S+)\s+—\s+(.*?)\s+\[(critical|high|normal|low)\]:\s*/
 const TRAIL = ' · '
 
@@ -189,7 +189,7 @@ function escalate (level, declared) {
 /**
  * Extractive summary: drop filler, keep order, cap the length.
  *
- * Lossy on purpose and reversible by eye — a reader can diff it against the
+ * Lossy on purpose and reversible by eye: a reader can diff it against the
  * original and see exactly what was thrown away, which is the property a
  * `sleep()` pretending to think does not have.
  */
@@ -205,7 +205,7 @@ function condense (text, max = 16) {
  *
  * QVAC is an optional peer dependency and is not installed, so there is no
  * model on this machine at all. That makes a scripted provider the only
- * available choice — and the right one anyway for a recorded demo, because the
+ * available choice, and the right one anyway for a recorded demo, because the
  * same input produces byte-identical output on every take.
  *
  * What it actually does with a message, all of it derived from the text:
@@ -266,7 +266,7 @@ class ScriptedProvider extends InferenceProvider {
     const summary = condense(request)
 
     // Slugged by the hash of the request, so the same request always lands on
-    // the same addressable slot — a repeat replaces rather than piles up — and
+    // the same addressable slot (a repeat replaces rather than piles up), and
     // a checker that knows the text can compute the slug and read it back.
     const memo = {
       slug: `triage/${core.toHex(core.sha256(Buffer.from(request, 'utf8'))).slice(0, 12)}`,

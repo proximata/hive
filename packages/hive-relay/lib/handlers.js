@@ -78,7 +78,7 @@ function uuidv4 () {
 
 /**
  * A v4-shaped uuid derived from a string, so the SAME input always yields the
- * SAME id — on this relay, on a peer relay, and after a restart.
+ * SAME id: on this relay, on a peer relay, and after a restart.
  *
  * This exists because a channel id must be a function of the signed create
  * event and not of whoever happened to apply it first. `events.createChannel`
@@ -86,8 +86,8 @@ function uuidv4 () {
  * random uuid in `apply`; replicate that one event to a second relay and each
  * side invents a different id for the same channel, after which every message
  * tagged with one relay's id is rejected by the other as `invalid: unknown
- * channel`. The DM path already derives its id for exactly this reason — see
- * `dmChannelId` — this makes group creation agree with it.
+ * channel`. The DM path already derives its id for exactly this reason (see
+ * `dmChannelId`), and this makes group creation agree with it.
  */
 function uuidFrom (seed) {
   return formatUuid(b4a.from(sha256(b4a.from(seed))).subarray(0, 16))

@@ -46,7 +46,7 @@ function resolveBind (flags = {}, env = {}) {
 
   const port = Number(one(flags.port, env.HIVE_RELAY_PORT, String(DEFAULT_PORT), '--port'))
   // 0 is meaningful (pick an ephemeral port), so this cannot use `|| 3000` the
-  // way the old inline version did — that turned `--port 0` into 3000.
+  // way the old inline version did, which turned `--port 0` into 3000.
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new Error(`--port must be an integer 0-65535, got ${JSON.stringify(port)}`)
   }
@@ -96,9 +96,9 @@ function publicOrigin (value) {
  *
  * The value is a comma-separated list of `host:port`, e.g.
  * `HIVE_DHT_BOOTSTRAP=192.168.1.10:49737`. A malformed entry throws here, at
- * startup, rather than at the first dial — a LAN deployment whose bootstrap
- * address is wrong should refuse to boot, not look healthy and never discover
- * a peer.
+ * startup, rather than at the first dial: a LAN deployment whose bootstrap
+ * address is wrong should refuse to boot. The alternative is a node that looks
+ * healthy and never discovers a peer.
  *
  * ponytail: one flat list, no health checks, no failover ordering, no
  * auto-publication. Upgrade path if that bites: carry the list wherever the

@@ -7,7 +7,7 @@
 // them declares the same `bare` bin name. npm refuses to link a bin claimed by
 // several packages, so none of them win and `bare` is never installed into
 // node_modules/.bin. Scripts that just say `bare foo.js` therefore die with
-// "bare: not found" — which is exactly what CI did for every run, silently,
+// "bare: not found", which is exactly what CI did for every run, silently,
 // because the failure was piped into `tail`.
 //
 // Resolving the binary through the module graph works the same way locally, in

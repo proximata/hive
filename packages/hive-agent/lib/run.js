@@ -21,7 +21,7 @@ const { AgentHome } = require('./home')
  * Connect, construct, start, and do not return until the agent is watching.
  *
  * Extracted from scripts/demo-delegation.js, which was the ONLY place that knew
- * how to wire an agent — the reason configuring one meant editing a demo. The
+ * how to wire an agent, which is why configuring one meant editing a demo. The
  * demo now calls this, so there is one wiring and `hive agent run` cannot drift
  * away from the thing the demo proves works.
  *
@@ -90,8 +90,8 @@ function once (emitter, name, timeout) {
  *
  * `Bare.exit` tears the runtime down including its worker threads;
  * `process.exit` on bare-process waits for them, which is the wrong half of
- * the contract here — measured with @qvac/sdk 0.18.2, whose llamacpp worker
- * outlives unloadModel and left SIGTERM hanging indefinitely.
+ * the contract here (measured with @qvac/sdk 0.18.2, whose llamacpp worker
+ * outlives unloadModel and left SIGTERM hanging indefinitely).
  */
 function exit (code) {
   if (typeof globalThis.Bare?.exit === 'function') globalThis.Bare.exit(code)
@@ -110,7 +110,7 @@ function defaultRoot (env = {}) {
 
 // A first run has to produce something that works, and the only runtime that
 // needs no model, no GPU and no download is the mock one. An operator who wants
-// a real model edits `runtime` and `model` in this file — which is the reason
+// a real model edits `runtime` and `model` in this file, which is the reason
 // it is written out in full rather than defaulted in code.
 function defaultMetadata (name) {
   return {
@@ -228,7 +228,7 @@ async function runAgent ({
   agent.on('refused', (event) => log(`[agent] refused ${event.pubkey.slice(0, 8)}…: not on the allowlist`))
 
   // Membership is replayed asynchronously after subscribe, so a count taken
-  // here is a lower bound, not the answer — say that rather than print a 0 the
+  // here is a lower bound. Say that rather than print a 0 the
   // `watching` lines above are about to contradict.
   log(`[agent] channels so far: ${agent.channels.size}; membership replays as it arrives`)
   log('[agent] running. Ctrl-C to stop.')
@@ -248,7 +248,7 @@ async function runAgent ({
   /**
    * Teardown for a process that is on its way out, which is NOT the same thing.
    *
-   * The relay socket is closed — that is the part another machine can observe,
+   * The relay socket is closed. That is the part another machine can observe,
    * and a clean close is worth having. The provider is deliberately NOT
    * unloaded: measured on @qvac/sdk 0.18.2 under Bare, `unloadModel` blocks the
    * JS thread and never returns, so every timer, every promise and any deadline
@@ -256,9 +256,9 @@ async function runAgent ({
    * has to SIGKILL. Weights belong to a process that is about to stop existing,
    * so letting the OS reclaim them is the correct trade.
    *
-   * ponytail: ceiling — an SDK that wanted to flush something on unload does
-   * not get to. Upgrade path: @qvac/bare-sdk, which owns its Bare worker
-   * lifecycle, or an unloadModel that yields.
+   * ponytail: the ceiling is that an SDK that wanted to flush something on
+   * unload does not get to. Upgrade path: @qvac/bare-sdk, which owns its Bare
+   * worker lifecycle, or an unloadModel that yields.
    */
   const stopAndExit = async () => {
     for (const [signal, handler] of handlers) process.removeListener(signal, handler)
@@ -270,14 +270,14 @@ async function runAgent ({
     }
     log('[agent] stopped')
 
-    // A resident inference worker makes a graceful exit impossible, not slow.
+    // A resident inference worker makes a graceful exit impossible.
     // Measured on @qvac/sdk 0.18.2 under Bare, model loaded: `Bare.exit(0)`
-    // neither exits nor returns — it blocks inside runtime teardown waiting for
+    // neither exits nor returns. It blocks inside runtime teardown waiting for
     // the llamacpp thread, so nothing after it runs and no timer armed before
     // it ever fires. There is no second chance to take, which is why this is
     // decided BEFORE exiting rather than as a fallback.
     //
-    // ponytail: SIGKILL costs the exit code — 137, not 0 — and a unit file
+    // ponytail: SIGKILL costs the exit code, which becomes 137, and a unit file
     // wants `SuccessExitStatus=SIGKILL`. Ceiling accepted because the socket is
     // already closed and the alternative is a process an operator has to kill
     // by hand. Upgrade path: @qvac/bare-sdk, which owns its Bare worker

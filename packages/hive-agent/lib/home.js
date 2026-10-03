@@ -15,7 +15,7 @@
  *
  * WHICH SOURCE WINS. The kind-30175 persona event stays authoritative: it is
  * the signed, published, replaceable document that other people read, and it
- * alone decides identity — slug, runtime, model, allowlist. This directory is
+ * alone decides identity: slug, runtime, model, allowlist. This directory is
  * layered ON TOP of it, for this process only, and nothing here is ever
  * published back. The split is deliberate: the prompt and the skills are the
  * things an operator edits between two turns while tuning an agent, and having
@@ -26,7 +26,7 @@
  * NOT A SANDBOX. bare-fs is unrestricted and this class does not restrict it:
  * a provider, a skill, or any other code in this process can read and write
  * every path the operator can, home directory or not. This is a CONVENTION for
- * where an agent's own state lives — a filing rule, not a jail. Do not host a
+ * where an agent's own state lives: a filing rule. Do not host a
  * third-party agent on it. The real sandbox is TASK-22 and does not exist yet.
  *
  * fs is INJECTED. `packages/hive-agent` has no fs dependency and must keep
@@ -38,7 +38,7 @@
 
 // A name reaches this class from an operator's `--name` flag, so it is a trust
 // boundary: it is interpolated into a filesystem path and `../../etc` would
-// escape the root. Allowlisted rather than sanitised — a rejected name is a
+// escape the root. Allowlisted rather than sanitised: a rejected name is a
 // typo the operator fixes, a rewritten one is a surprise.
 const NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/
 
@@ -46,7 +46,7 @@ const KEY = /^[0-9a-f]{64}$/i
 
 function join (...parts) {
   // ponytail: string join instead of bare-path, so this module requires nothing
-  // and stays loadable in a browser. Ceiling — a Windows path with backslashes
+  // and stays loadable in a browser. Ceiling: a Windows path with backslashes
   // is not normalised; forward slashes work on every platform's fs calls, so
   // the visible cost is cosmetic paths in error messages. Upgrade path: inject
   // `path` alongside `fs` if that ever stops being true.
@@ -158,9 +158,8 @@ class AgentHome {
    * otherwise the persona's own, with every skill appended.
    *
    * Read from disk on every call rather than cached, so editing instruction.md
-   * changes the NEXT turn with no restart. That is the whole point of the file
-   * — an operator tuning an agent should see the effect on the next message,
-   * not after a redeploy.
+   * changes the NEXT turn with no restart. That is the whole point of the file:
+   * an operator tuning an agent should see the effect on the next message.
    */
   systemPrompt (persona = null) {
     const base = this.readInstruction() ?? persona?.system_prompt ?? null

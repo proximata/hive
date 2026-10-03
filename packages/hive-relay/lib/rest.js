@@ -166,7 +166,7 @@ function createRestRouter (relay, opts = {}) {
     }
 
     // The web client: markup, CSS, one ES module and the crypto it imports.
-    // Unauthenticated on purpose — the page has to load before the browser has
+    // Unauthenticated on purpose: the page has to load before the browser has
     // a key, and it carries nothing a reader could not get from the repo. Every
     // byte it then reads still goes through NIP-98 or NIP-42 like any other
     // client. A miss returns false and falls through to the routes below.
@@ -234,9 +234,9 @@ function createRestRouter (relay, opts = {}) {
       const payload = safeJson(body)
       const filters = Array.isArray(payload) ? payload : [payload]
       // Same cap as the WebSocket REQ path: one HTTP body must not buy
-      // thousands of table scans either. Refused outright, never truncated —
-      // a client that silently gets 20 of its 4600 filters answered is being
-      // lied to about what it queried.
+      // thousands of table scans either. Refused outright, because a client
+      // that silently gets 20 of its 4600 filters answered is being lied to
+      // about what it queried.
       if (filters.length > MAX_FILTERS_PER_REQ) {
         return json(res, 400, { error: 'invalid', message: `too many filters (max ${MAX_FILTERS_PER_REQ})` })
       }
@@ -373,7 +373,7 @@ function createRestRouter (relay, opts = {}) {
         swarm: relay.swarmKey ?? null,
         connections: relay.connections.size,
         subscriptions: relay.subscriptions.size,
-        // For clients outside the module graph — the browser one. `kinds` is
+        // For clients outside the module graph (the browser one). `kinds` is
         // the label registry; `pGatedKinds` is the subset a global REQ may not
         // ask for, so a client can build a legal firehose filter instead of
         // guessing and getting CLOSED.

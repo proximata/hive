@@ -22,7 +22,7 @@ const { InferenceProvider, CAPABILITIES } = require('./provider')
 //
 // A persona's `model` is one of three things, checked in this order:
 //
-//   1. a size alias below — what a persona should normally say, because
+//   1. a size alias below: what a persona should normally say, because
 //      "medium" survives the SDK renaming a quantization and `QWEN3_4B_Q4_K_M`
 //      does not;
 //   2. an SDK constant name, passed through and resolved against the SDK's
@@ -35,7 +35,7 @@ const { InferenceProvider, CAPABILITIES } = require('./provider')
 // aliasing anything else here would be inventing a capability the harness does
 // not drive.
 const MODELS = {
-  small: 'LLAMA_3_2_1B_INST_Q4_0', //  ~0.8 GB — answers a chat turn on a laptop CPU
+  small: 'LLAMA_3_2_1B_INST_Q4_0', //  ~0.8 GB, answers a chat turn on a laptop CPU
   medium: 'QWEN3_4B_INST_Q4_K_M', //   ~2.5 GB
   large: 'QWEN3_8B_INST_Q4_K_M' //     ~5 GB, wants a GPU
 }
@@ -91,7 +91,7 @@ class QvacProvider extends InferenceProvider {
     if (typeof sdk.plugins !== 'function') return
     // The package `exports` map declares these subpaths with an "import"
     // condition only, so Bare's `require` cannot resolve `@qvac/sdk/...`.
-    // ponytail: reached by relative file path instead. Ceiling — this breaks
+    // ponytail: reached by relative file path instead. Ceiling: this breaks
     // if the SDK moves its dist layout. Upgrade path: use `@qvac/bare-sdk`,
     // which the SDK's own error message recommends for direct Bare usage.
     let plugin
@@ -115,7 +115,7 @@ class QvacProvider extends InferenceProvider {
   // An SDK that does not export a SHOUTING_SNAKE_CASE name is not an error: a
   // caller may pass a descriptor or a URL the SDK understands, and the test
   // suite injects a fake SDK that exports no constants at all. A lowercase name
-  // that is not an alias IS an error, and says what the aliases are — that case
+  // that is not an alias IS an error, and says what the aliases are. That case
   // is a persona typo, and a registry error four layers down does not name it.
   #resolveModel (sdk) {
     if (typeof this.modelSrc !== 'string') return this.modelSrc
@@ -136,8 +136,8 @@ class QvacProvider extends InferenceProvider {
   /**
    * Say what is about to be downloaded, before it is.
    *
-   * The first load of a model fetches its weights — 0.8 GB for the default and
-   * several times that for `large` — and until it lands the process looks
+   * The first load of a model fetches its weights (0.8 GB for the default and
+   * several times that for `large`), and until it lands the process looks
    * hung: no output, no reply, nothing on the relay. An operator who was not
    * told will kill it at the two-minute mark and conclude the agent is broken.
    * So the size is printed up front from the descriptor's own `expectedSize`,
@@ -215,8 +215,8 @@ class QvacProvider extends InferenceProvider {
   complete ({ history = [], tools = [], signal = null } = {}) {
     // Only when the caller did not bring one. The harness builds the system
     // message itself (agent.js `_systemPrompt`), so prepending unconditionally
-    // sent the model two system turns — and the stale one first, which is
-    // exactly wrong once a home directory overrides the persona's prompt.
+    // sent the model two system turns, the stale one first. That is exactly
+    // wrong once a home directory overrides the persona's prompt.
     const messages = this.systemPrompt === null || history[0]?.role === 'system'
       ? history
       : [{ role: 'system', content: this.systemPrompt }, ...history]
@@ -252,7 +252,7 @@ class QvacProvider extends InferenceProvider {
       })(),
       // QVAC names the finished text `contentText`; the harness reads
       // `content`. Without this the harness silently falls back to the
-      // concatenated deltas — right answer today, but wrong the moment a
+      // concatenated deltas: right answer today, but wrong the moment a
       // non-streaming run returns text with no deltas at all.
       final: started.then((active) => active.final).then((final) => (
         final !== null && typeof final === 'object' && final.content === undefined
@@ -288,7 +288,7 @@ class QvacProvider extends InferenceProvider {
    * that blocks the thread, and @qvac/sdk 0.18.2 under Bare does exactly that:
    * `unloadModel` after a real completion never returns, starving every timer
    * including this one. That is why `hive agent run` does not call close() on
-   * its way out at all — see `stopAndExit` in lib/run.js.
+   * its way out at all. See `stopAndExit` in lib/run.js.
    *
    * ponytail: a timeout rather than a fix, because the hang is inside the SDK.
    * Upgrade path: @qvac/bare-sdk, which owns its own Bare worker lifecycle.
@@ -355,8 +355,8 @@ function providerFromPersona (persona, opts = {}) {
     })
   }
 
-  // Routes cannot come from a persona document — they are pubkeys, resolved at
-  // wiring time — so `opts.scripted` carries them.
+  // Routes cannot come from a persona document (they are pubkeys, resolved at
+  // wiring time), so `opts.scripted` carries them.
   if (runtime === 'scripted') {
     return new ScriptedProvider({
       name: persona?.slug ?? persona?.display_name ?? 'agent',

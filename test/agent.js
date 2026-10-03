@@ -313,7 +313,7 @@ test('a persona names a model by size, an SDK constant, or not at all', async (t
     'progress reports every 10%, not every tick')
 
   // An exact SDK constant still works, and one this SDK does not export is
-  // passed through rather than refused — a caller may know a newer name.
+  // passed through rather than refused, since a caller may know a newer name.
   const exact = new QvacProvider({ model: 'LLAMA_3_2_1B_INST_Q4_0', sdk: fake })
   await exact.ready()
   t.is(fake.params.modelSrc.expectedSize, 807_000_000)
@@ -355,7 +355,7 @@ test('an agent publishes a capability profile on start', async (t) => {
   t.ok(profile.capabilities.includes('text-generation'))
   t.alike(profile.models, ['mock-1'])
   // Without this, every agent the harness publishes is invisible to
-  // `hive agents find --query` — the discovery verbs read this field.
+  // `hive agents find --query`: the discovery verbs read this field.
   t.is(profile.description, 'reviews pull requests and triages bugs')
 })
 
