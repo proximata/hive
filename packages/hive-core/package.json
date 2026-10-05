@@ -13,7 +13,7 @@
     "@noble/hashes": "^2.3.0",
     "b4a": "^1.6.7",
     "bare-encoding": "^1.0.0",
-    "bare-crypto": "^1.15.3"
+    "bare-crypto": "^1.15.4"
   },
   "imports": {
     "#encoding": {
