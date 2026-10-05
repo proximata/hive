@@ -57,7 +57,7 @@
   },
   "devDependencies": {
     "bare-build": "^1.0.4",
-    "brittle": "^4.1.0"
+    "brittle": "^4.3.0"
   },
   "dependencies": {
     "hive-agent": "file:packages/hive-agent",
